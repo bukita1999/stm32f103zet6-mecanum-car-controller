@@ -1,0 +1,15 @@
+# Compiled object files
+*.o
+*.d
+*.su
+*.map
+*.list
+*.elf
+
+# IDE project files
+.cproject
+.project
+.mxproject
+
+# Debug directory
+Debug/
