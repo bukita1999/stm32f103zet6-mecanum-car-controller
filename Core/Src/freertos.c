@@ -451,7 +451,7 @@ float PIDCompute(PIDController_t *pid)
  * @param encoderTimer: 编码器定时器
  * @param pwmChannel: PWM通道
  */
-void MotorInit(Motor_t *motor, uint8_t id, TIM_TypeDef *encoderTimer, uint8_t pwmChannel)
+void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint8_t pwmChannel)
 {
   /* 初始化基本参数 */
   motor->id = id;
@@ -483,7 +483,7 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_TypeDef *encoderTimer, uint8_t pw
 int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
 {
   /* 读取当前编码器计数 */
-  int32_t currentCount = motor->encoderTimer->CNT;
+  int32_t currentCount = __HAL_TIM_GET_COUNTER(motor->encoderTimer);
 
   /* 计算编码器计数变化量 */
   int32_t encoderDelta = currentCount - motor->lastEncoderCount;
@@ -563,16 +563,22 @@ void SetMotorSpeed(Motor_t *motor, int16_t speed)
 void MotorSystemInit(void)
 {
   /* 初始化系统状态 */
-  memset(&systemState, 0, sizeof(SystemState_t));
-
-  /* 初始化四个电机 */
-  MotorInit(&systemState.motors[0], 0, TIM2, 1);
-  MotorInit(&systemState.motors[1], 1, TIM3, 2);
-  MotorInit(&systemState.motors[2], 2, TIM4, 3);
-  MotorInit(&systemState.motors[3], 3, TIM5, 4);
-
-  /* 设置系统初始化标志 */
-  systemState.systemFlags.initialized = 1;
+    memset(&systemState, 0, sizeof(SystemState_t));
+    
+    /* 初始化四个电机 - 使用正确的定时器句柄 */
+    MotorInit(&systemState.motors[0], 0, &htim2, 1);
+    MotorInit(&systemState.motors[1], 1, &htim3, 2);
+    MotorInit(&systemState.motors[2], 2, &htim4, 3);
+    MotorInit(&systemState.motors[3], 3, &htim5, 4);
+    
+    /* 启动编码器定时器 */
+    HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+    HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+    HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
+    HAL_TIM_Encoder_Start(&htim5, TIM_CHANNEL_ALL);
+    
+    /* 设置系统初始化标志 */
+    systemState.systemFlags.initialized = 1;
 }
 
 /* USER CODE END Application */

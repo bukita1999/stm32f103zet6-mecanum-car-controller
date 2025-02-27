@@ -68,7 +68,7 @@ typedef struct {
     int32_t encoderCount;      /* 编码器计数 */
     int32_t lastEncoderCount;  /* 上次编码器计数 */
     uint32_t lastUpdateTime;   /* 上次更新时间 (ms) */
-    TIM_TypeDef* encoderTimer; /* 编码器定时器 */
+    TIM_HandleTypeDef* encoderTimer; /* 编码器定时器 */
     uint8_t pwmChannel;        /* PWM通道 */
     PIDController_t pidController; /* 速度PID控制器 */
     uint8_t errorCounter;      /* 错误计数器 */
@@ -120,7 +120,7 @@ extern TIM_HandleTypeDef htim5;
 
 /* 函数声明 */
 void MotorSystemInit(void);
-void MotorInit(Motor_t* motor, uint8_t id, TIM_TypeDef* encoderTimer, uint8_t pwmChannel);
+void MotorInit(Motor_t* motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint8_t pwmChannel);
 void PIDInit(PIDController_t* pid, float kp, float ki, float kd, float min, float max);
 float PIDCompute(PIDController_t* pid);
 int16_t CalculateMotorSpeed(Motor_t* motor, uint32_t deltaTime);
