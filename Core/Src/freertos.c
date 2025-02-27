@@ -344,7 +344,7 @@ void StartCommunicationTask(void *argument)
         HAL_UART_Transmit(&huart1, (uint8_t*)uartTxBuffer, len, 100);
       }
     }
-    osDelay(50);
+    osDelay(500);
   }
   /* USER CODE END StartCommunicationTask */
 }
