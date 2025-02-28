@@ -28,6 +28,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "pca9685.h"
+#include "i2c.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -133,69 +135,69 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
  */
 void MX_FREERTOS_Init(void)
 {
-  /* USER CODE BEGIN Init */
+    /* USER CODE BEGIN Init */
 
-  /* USER CODE END Init */
-  /* Create the mutex(es) */
-  /* creation of motorDataMutex */
-  motorDataMutexHandle = osMutexNew(&motorDataMutex_attributes);
+    /* USER CODE END Init */
+    /* Create the mutex(es) */
+    /* creation of motorDataMutex */
+    motorDataMutexHandle = osMutexNew(&motorDataMutex_attributes);
 
-  /* creation of servoDataMutex */
-  servoDataMutexHandle = osMutexNew(&servoDataMutex_attributes);
+    /* creation of servoDataMutex */
+    servoDataMutexHandle = osMutexNew(&servoDataMutex_attributes);
 
-  /* creation of i2cMutex */
-  i2cMutexHandle = osMutexNew(&i2cMutex_attributes);
+    /* creation of i2cMutex */
+    i2cMutexHandle = osMutexNew(&i2cMutex_attributes);
 
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
+    /* USER CODE BEGIN RTOS_MUTEX */
+    /* add mutexes, ... */
+    /* USER CODE END RTOS_MUTEX */
 
-  /* Create the semaphores(s) */
-  /* creation of statusSemaphore */
-  statusSemaphoreHandle = osSemaphoreNew(1, 1, &statusSemaphore_attributes);
+    /* Create the semaphores(s) */
+    /* creation of statusSemaphore */
+    statusSemaphoreHandle = osSemaphoreNew(1, 1, &statusSemaphore_attributes);
 
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
+    /* USER CODE BEGIN RTOS_SEMAPHORES */
+    /* add semaphores, ... */
+    /* USER CODE END RTOS_SEMAPHORES */
 
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
+    /* USER CODE BEGIN RTOS_TIMERS */
+    /* start timers, add new ones, ... */
+    /* USER CODE END RTOS_TIMERS */
 
-  /* Create the queue(s) */
-  /* creation of commandQueue */
-  commandQueueHandle = osMessageQueueNew(16, sizeof(uint16_t), &commandQueue_attributes);
+    /* Create the queue(s) */
+    /* creation of commandQueue */
+    commandQueueHandle = osMessageQueueNew(16, sizeof(uint16_t), &commandQueue_attributes);
 
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
+    /* USER CODE BEGIN RTOS_QUEUES */
+    /* add queues, ... */
+    /* USER CODE END RTOS_QUEUES */
 
-  /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+    /* Create the thread(s) */
+    /* creation of defaultTask */
+    defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-  /* creation of MotorControlTas */
-  MotorControlTasHandle = osThreadNew(StartMotorControlTask, NULL, &MotorControlTas_attributes);
+    /* creation of MotorControlTas */
+    MotorControlTasHandle = osThreadNew(StartMotorControlTask, NULL, &MotorControlTas_attributes);
 
-  /* creation of ServoControlTas */
-  ServoControlTasHandle = osThreadNew(StartServoControlTask, NULL, &ServoControlTas_attributes);
+    /* creation of ServoControlTas */
+    ServoControlTasHandle = osThreadNew(StartServoControlTask, NULL, &ServoControlTas_attributes);
 
-  /* creation of CommunicationTa */
-  CommunicationTaHandle = osThreadNew(StartCommunicationTask, NULL, &CommunicationTa_attributes);
+    /* creation of CommunicationTa */
+    CommunicationTaHandle = osThreadNew(StartCommunicationTask, NULL, &CommunicationTa_attributes);
 
-  /* creation of MonitorTask */
-  MonitorTaskHandle = osThreadNew(StartMonitorTask, NULL, &MonitorTask_attributes);
+    /* creation of MonitorTask */
+    MonitorTaskHandle = osThreadNew(StartMonitorTask, NULL, &MonitorTask_attributes);
 
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
+    /* USER CODE BEGIN RTOS_THREADS */
+    /* add threads, ... */
+    /* USER CODE END RTOS_THREADS */
 
-  /* creation of systemEventGroup */
-  systemEventGroupHandle = osEventFlagsNew(&systemEventGroup_attributes);
+    /* creation of systemEventGroup */
+    systemEventGroupHandle = osEventFlagsNew(&systemEventGroup_attributes);
 
-  /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
-  /* USER CODE END RTOS_EVENTS */
+    /* USER CODE BEGIN RTOS_EVENTS */
+    /* add events, ... */
+    /* USER CODE END RTOS_EVENTS */
 }
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -207,21 +209,21 @@ void MX_FREERTOS_Init(void)
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
-  /* USER CODE BEGIN StartDefaultTask */
-  /* Infinite loop */
-  for (;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartDefaultTask */
+    /* USER CODE BEGIN StartDefaultTask */
+    /* Infinite loop */
+    for (;;)
+    {
+        osDelay(1);
+    }
+    /* USER CODE END StartDefaultTask */
 }
 
 /* USER CODE BEGIN Header_StartMotorControlTask */
 /**
- * @brief Function implementing the MotorControlTas thread.
- * @param argument: Not used
- * @retval None
- */
+* @brief 电机控制任务函数
+* @param argument: 未使用
+* @retval None
+*/
 /* USER CODE END Header_StartMotorControlTask */
 void StartMotorControlTask(void *argument)
 {
@@ -232,45 +234,58 @@ void StartMotorControlTask(void *argument)
   /* 任务时间戳变量 */
   uint32_t lastWakeTime;
   uint32_t currentTime;
+  static uint32_t lastReportTime = 0;
 
   /* 初始化任务时间戳 */
   lastWakeTime = osKernelGetTickCount();
 
-  /* Infinite loop */
-  for (;;)
+  /* 设置第一个电机的PWM占空比为50%，方向为正向 */
+  /* 这将产生50%占空比的PWM信号，在PCA9685上对应2048计数值 */
+  if (osMutexAcquire(motorDataMutexHandle, 100) == osOK) {
+    SetMotorSpeed(&systemState.motors[0], 50);
+    osMutexRelease(motorDataMutexHandle);
+
+    /* 输出调试信息 */
+    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor1 set to 50%% PWM, direction: forward\r\n");
+    HAL_UART_Transmit(&huart1, (uint8_t*)uartTxBuffer, strlen(uartTxBuffer), 100);
+  }
+
+  /* 无限循环 */
+  for(;;)
   {
     /* 获取当前时间 */
     currentTime = osKernelGetTickCount();
-
-    /* 计算时间差 */
     uint32_t deltaTime = currentTime - lastWakeTime;
 
     /* 处理每个电机 */
-    for (int i = 0; i < 4; i++)
-    {
+    for (uint8_t i = 0; i < 4; i++) {
       /* 请求电机数据互斥量 */
-      if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
-      {
+      if (osMutexAcquire(motorDataMutexHandle, 10) == osOK) {
         /* 计算当前电机速度 */
         CalculateMotorSpeed(&systemState.motors[i], deltaTime);
 
-        /* 计算PID输出 */
-        systemState.motors[i].pidController.currentValue = (float)systemState.motors[i].currentSpeed;
-        float pidOutput = PIDCompute(&systemState.motors[i].pidController);
-
-        /* 更新电机输出 */
-        /* 在实际系统中这里会根据PID输出设置PWM占空比 */
-        
-        /* 此处省略具体PWM设置代码 */
+        /* 注意：实际应用中这里会有PID控制逻辑，但为了测试PWM输出，我们省略这部分 */
 
         /* 释放电机数据互斥量 */
         osMutexRelease(motorDataMutexHandle);
-      }
-      else
-      {
-        /* 设置互斥量获取失败标志 */
+      } else {
+        /* 互斥量获取失败处理 */
         systemState.systemFlags.motorError = 1;
-        /* 在实际系统中可能需要添加错误处理 */
+      }
+    }
+
+    /* 每5秒输出一次电机1的状态 */
+    if ((currentTime - lastReportTime) > 5000) {
+      lastReportTime = currentTime;
+
+      if (osMutexAcquire(motorDataMutexHandle, 10) == osOK) {
+        snprintf(uartTxBuffer, sizeof(uartTxBuffer), 
+                "Motor1: %d RPM, PWM: %d%%\r\n",
+                systemState.motors[0].currentSpeed, 
+                systemState.motors[0].pwmPercent);
+        osMutexRelease(motorDataMutexHandle);
+
+        HAL_UART_Transmit(&huart1, (uint8_t*)uartTxBuffer, strlen(uartTxBuffer), 100);
       }
     }
 
@@ -288,19 +303,57 @@ void StartMotorControlTask(void *argument)
 
 /* USER CODE BEGIN Header_StartServoControlTask */
 /**
- * @brief Function implementing the ServoControlTas thread.
- * @param argument: Not used
- * @retval None
- */
+* @brief 舵机控制任务函数
+* @param argument: 未使用
+* @retval None
+*/
 /* USER CODE END Header_StartServoControlTask */
 void StartServoControlTask(void *argument)
 {
   /* USER CODE BEGIN StartServoControlTask */
-  
-  /* Infinite loop */
-  for (;;)
+  /* 等待系统初始化完成 */
+  osDelay(200);
+
+  /* 舵机控制周期 */
+  const uint32_t SERVO_CONTROL_PERIOD = 20; /* 20ms */
+  uint16_t command;
+  uint8_t servoId, angle;
+
+  /* 设置第一个舵机角度为90度 */
+  /* 对于90度位置，PCA9685将产生7.5%占空比PWM信号，约307计数值 */
+  /* 但根据我们的SERVO_MIN_PULSE和SERVO_MAX_PULSE设置，实际值约为375 */
+  if (osMutexAcquire(servoDataMutexHandle, 100) == osOK) {
+    SetServoAngle(&systemState.servos[0], 90);
+    osMutexRelease(servoDataMutexHandle);
+
+    /* 输出调试信息 */
+    snprintf(uartTxBuffer, sizeof(uartTxBuffer), 
+            "Servo1 set to 90 degrees, PWM pulse width: ~1.5ms (7.5%% duty cycle)\r\n");
+    HAL_UART_Transmit(&huart1, (uint8_t*)uartTxBuffer, strlen(uartTxBuffer), 100);
+  }
+
+  /* 无限循环 */
+  for(;;)
   {
-    osDelay(1);
+    /* 接收命令并执行舵机控制 - 实际应用中这里会处理接收到的命令 */
+    if (osMessageQueueGet(commandQueueHandle, &command, NULL, 0) == osOK) {
+      /* 解析命令 - 示例格式：高8位为舵机ID，低8位为角度值 */
+      servoId = (command >> 8) & 0xFF;
+      angle = command & 0xFF;
+
+      if (servoId < 8) {
+        /* 使用简化接口设置舵机角度，确保线程安全 */
+        if (osMutexAcquire(servoDataMutexHandle, 10) == osOK) {
+          SetServoAngle(&systemState.servos[servoId], (float)angle);
+          osMutexRelease(servoDataMutexHandle);
+        } else {
+          systemState.systemFlags.servoError = 1;
+        }
+      }
+    }
+
+    /* 等待下一个周期 */
+    osDelay(SERVO_CONTROL_PERIOD);
   }
   /* USER CODE END StartServoControlTask */
 }
@@ -314,39 +367,41 @@ void StartServoControlTask(void *argument)
 /* USER CODE END Header_StartCommunicationTask */
 void StartCommunicationTask(void *argument)
 {
-  /* USER CODE BEGIN StartCommunicationTask */
-  osDelay(100);
+    /* USER CODE BEGIN StartCommunicationTask */
+    osDelay(100);
 
-  /* Infinite loop */
-  for (;;)
-  {
-    /* 等待电机数据更新事件 */
-    uint32_t eventFlag = osEventFlagsWait(systemEventGroupHandle, 
-                                         EVENT_MOTOR_UPDATE, 
-                                         osFlagsWaitAny, 
-                                         100);
-    
-    /* 如果事件触发 */
-    if ((eventFlag & EVENT_MOTOR_UPDATE) == EVENT_MOTOR_UPDATE) {
-      /* 请求电机数据互斥量 */
-      if (osMutexAcquire(motorDataMutexHandle, 10) == osOK) {
-        /* 格式化电机速度数据 */
-        int len = sprintf(uartTxBuffer, "SPD,%d,%d,%d,%d\r\n", 
-                systemState.motors[0].currentSpeed,
-                systemState.motors[1].currentSpeed,
-                systemState.motors[2].currentSpeed,
-                systemState.motors[3].currentSpeed);
-        
-        /* 释放电机数据互斥量 */
-        osMutexRelease(motorDataMutexHandle);
-        
-        /* 通过UART发送数据 */
-        HAL_UART_Transmit(&huart1, (uint8_t*)uartTxBuffer, len, 100);
-      }
+    /* Infinite loop */
+    for (;;)
+    {
+        /* 等待电机数据更新事件 */
+        uint32_t eventFlag = osEventFlagsWait(systemEventGroupHandle,
+                                              EVENT_MOTOR_UPDATE,
+                                              osFlagsWaitAny,
+                                              100);
+
+        /* 如果事件触发 */
+        if ((eventFlag & EVENT_MOTOR_UPDATE) == EVENT_MOTOR_UPDATE)
+        {
+            /* 请求电机数据互斥量 */
+            if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
+            {
+                /* 格式化电机速度数据 */
+                int len = sprintf(uartTxBuffer, "SPD,%d,%d,%d,%d\r\n",
+                                  systemState.motors[0].currentSpeed,
+                                  systemState.motors[1].currentSpeed,
+                                  systemState.motors[2].currentSpeed,
+                                  systemState.motors[3].currentSpeed);
+
+                /* 释放电机数据互斥量 */
+                osMutexRelease(motorDataMutexHandle);
+
+                /* 通过UART发送数据 */
+                HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+            }
+        }
+        osDelay(500);
     }
-    osDelay(500);
-  }
-  /* USER CODE END StartCommunicationTask */
+    /* USER CODE END StartCommunicationTask */
 }
 
 /* USER CODE BEGIN Header_StartMonitorTask */
@@ -358,13 +413,13 @@ void StartCommunicationTask(void *argument)
 /* USER CODE END Header_StartMonitorTask */
 void StartMonitorTask(void *argument)
 {
-  /* USER CODE BEGIN StartMonitorTask */
-  /* Infinite loop */
-  for (;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartMonitorTask */
+    /* USER CODE BEGIN StartMonitorTask */
+    /* Infinite loop */
+    for (;;)
+    {
+        osDelay(1);
+    }
+    /* USER CODE END StartMonitorTask */
 }
 
 /* Private application code --------------------------------------------------*/
@@ -381,22 +436,22 @@ void StartMonitorTask(void *argument)
  */
 void PIDInit(PIDController_t *pid, float kp, float ki, float kd, float min, float max)
 {
-  /* 设置PID参数 */
-  pid->Kp = kp;
-  pid->Ki = ki;
-  pid->Kd = kd;
+    /* 设置PID参数 */
+    pid->Kp = kp;
+    pid->Ki = ki;
+    pid->Kd = kd;
 
-  /* 设置输出限制 */
-  pid->outputMin = min;
-  pid->outputMax = max;
+    /* 设置输出限制 */
+    pid->outputMin = min;
+    pid->outputMax = max;
 
-  /* 初始化PID状态 */
-  pid->targetValue = 0;
-  pid->currentValue = 0;
-  pid->error = 0;
-  pid->lastError = 0;
-  pid->errorSum = 0;
-  pid->output = 0;
+    /* 初始化PID状态 */
+    pid->targetValue = 0;
+    pid->currentValue = 0;
+    pid->error = 0;
+    pid->lastError = 0;
+    pid->errorSum = 0;
+    pid->output = 0;
 }
 
 /**
@@ -406,72 +461,90 @@ void PIDInit(PIDController_t *pid, float kp, float ki, float kd, float min, floa
  */
 float PIDCompute(PIDController_t *pid)
 {
-  /* 计算误差 */
-  pid->error = pid->targetValue - pid->currentValue;
+    /* 计算误差 */
+    pid->error = pid->targetValue - pid->currentValue;
 
-  /* 计算积分项 */
-  pid->errorSum += pid->error;
+    /* 计算积分项 */
+    pid->errorSum += pid->error;
 
-  /* 防止积分饱和 */
-  if (pid->errorSum > pid->outputMax)
-  {
-    pid->errorSum = pid->outputMax;
-  }
-  else if (pid->errorSum < pid->outputMin)
-  {
-    pid->errorSum = pid->outputMin;
-  }
+    /* 防止积分饱和 */
+    if (pid->errorSum > pid->outputMax)
+    {
+        pid->errorSum = pid->outputMax;
+    }
+    else if (pid->errorSum < pid->outputMin)
+    {
+        pid->errorSum = pid->outputMin;
+    }
 
-  /* 计算微分项 */
-  float errorDiff = pid->error - pid->lastError;
+    /* 计算微分项 */
+    float errorDiff = pid->error - pid->lastError;
 
-  /* 计算PID输出 */
-  pid->output = pid->Kp * pid->error + pid->Ki * pid->errorSum + pid->Kd * errorDiff;
+    /* 计算PID输出 */
+    pid->output = pid->Kp * pid->error + pid->Ki * pid->errorSum + pid->Kd * errorDiff;
 
-  /* 输出限幅 */
-  if (pid->output > pid->outputMax)
-  {
-    pid->output = pid->outputMax;
-  }
-  else if (pid->output < pid->outputMin)
-  {
-    pid->output = pid->outputMin;
-  }
+    /* 输出限幅 */
+    if (pid->output > pid->outputMax)
+    {
+        pid->output = pid->outputMax;
+    }
+    else if (pid->output < pid->outputMin)
+    {
+        pid->output = pid->outputMin;
+    }
 
-  /* 保存当前误差 */
-  pid->lastError = pid->error;
+    /* 保存当前误差 */
+    pid->lastError = pid->error;
 
-  return pid->output;
+    return pid->output;
 }
 
 /**
  * @brief 初始化电机
  * @param motor: 电机结构体指针
  * @param id: 电机ID
- * @param encoderTimer: 编码器定时器
- * @param pwmChannel: PWM通道
+ * @param encoderTimer: 编码器定时器句柄
+ * @param pwmChannel: PCA9685 PWM通道
+ * @param dirPort: 方向控制GPIO端口
+ * @param dirPin: 方向控制GPIO引脚
  */
-void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint8_t pwmChannel)
+void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint8_t pwmChannel,
+               GPIO_TypeDef *dirPort, uint16_t dirPin)
 {
-  /* 初始化基本参数 */
-  motor->id = id;
-  motor->state = MOTOR_STOP;
-  motor->targetSpeed = 0;
-  motor->currentSpeed = 0;
-  motor->encoderCount = 0;
-  motor->lastEncoderCount = 0;
-  motor->lastUpdateTime = 0;
-  motor->encoderTimer = encoderTimer;
-  motor->pwmChannel = pwmChannel;
-  motor->errorCounter = 0;
+    /* 初始化基本参数 */
+    motor->id = id;
+    motor->state = MOTOR_STOP;
+    motor->direction = MOTOR_DIR_FORWARD;
+    motor->targetSpeed = 0;
+    motor->currentSpeed = 0;
+    motor->pwmPercent = 0;
+    motor->encoderCount = 0;
+    motor->lastEncoderCount = 0;
+    motor->lastUpdateTime = 0;
+    motor->encoderTimer = encoderTimer;
+    motor->pwmChannel = pwmChannel;
+    motor->dirPort = dirPort;
+    motor->dirPin = dirPin;
+    motor->errorCounter = 0;
 
-  /* 清除错误标志 */
-  motor->flags.encoderError = 0;
-  motor->flags.overCurrent = 0;
-  motor->flags.stalled = 0;
+    /* 清除错误标志 */
+    motor->flags.encoderError = 0;
+    motor->flags.overCurrent = 0;
+    motor->flags.stalled = 0;
 
-  /* 初始化PID控制器 */
-  PIDInit(&motor->pidController, 1.0f, 0.1f, 0.01f, -1000.0f, 1000.0f);
+    /* 初始化PID控制器 */
+    PIDInit(&motor->pidController, 1.0f, 0.1f, 0.01f, -100.0f, 100.0f);
+
+    /* 设置方向引脚为输出 */
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = dirPin;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(dirPort, &GPIO_InitStruct);
+
+    /* 初始方向设为正向 */
+    HAL_GPIO_WritePin(dirPort, dirPin, GPIO_PIN_RESET); /* 根据您的硬件可能需要调整 */
 }
 
 /**
@@ -482,79 +555,95 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint
  */
 int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
 {
-  /* 读取当前编码器计数 */
-  int32_t currentCount = __HAL_TIM_GET_COUNTER(motor->encoderTimer);
+    /* 读取当前编码器计数 */
+    int32_t currentCount = __HAL_TIM_GET_COUNTER(motor->encoderTimer);
 
-  /* 计算编码器计数变化量 */
-  int32_t encoderDelta = currentCount - motor->lastEncoderCount;
+    /* 计算编码器计数变化量 */
+    int32_t encoderDelta = currentCount - motor->lastEncoderCount;
 
-  /* 处理计数器溢出情况 */
-  if (encoderDelta > 32768)
-  { /* 正向溢出 */
-    encoderDelta = encoderDelta - 65536;
-  }
-  else if (encoderDelta < -32768)
-  { /* 负向溢出 */
-    encoderDelta = encoderDelta + 65536;
-  }
-
-  /* 更新编码器计数 */
-  motor->lastEncoderCount = currentCount;
-  motor->encoderCount += encoderDelta;
-
-  /* 计算速度(转/分) */
-  /* 公式: speed = (脉冲数 / 每转脉冲数) * (60秒/分 / 时间秒) */
-  int16_t speed = (int16_t)((float)encoderDelta * 60.0f * 1000.0f /
-                            ((float)ENCODER_COUNTS_PER_REV * (float)deltaTime));
-
-  /* 更新电机速度 */
-  motor->currentSpeed = speed;
-
-  /* 检测堵转情况 */
-  if (abs(motor->targetSpeed) > 20 && abs(motor->currentSpeed) < 5)
-  {
-    motor->errorCounter++;
-    if (motor->errorCounter > 50)
-    { /* 连续50次检测到可能堵转 */
-      motor->flags.stalled = 1;
+    /* 处理计数器溢出情况 */
+    if (encoderDelta > 32768)
+    { /* 正向溢出 */
+        encoderDelta = encoderDelta - 65536;
     }
-  }
-  else
-  {
-    /* 恢复正常时重置计数器 */
-    motor->errorCounter = 0;
-  }
+    else if (encoderDelta < -32768)
+    { /* 负向溢出 */
+        encoderDelta = encoderDelta + 65536;
+    }
 
-  return speed;
+    /* 更新编码器计数 */
+    motor->lastEncoderCount = currentCount;
+    motor->encoderCount += encoderDelta;
+
+    /* 计算速度(转/分) */
+    /* 公式: speed = (脉冲数 / 每转脉冲数) * (60秒/分 / 时间秒) */
+    int16_t speed = (int16_t)((float)encoderDelta * 60.0f * 1000.0f /
+                              ((float)ENCODER_COUNTS_PER_REV * (float)deltaTime));
+
+    /* 更新电机速度 */
+    motor->currentSpeed = speed;
+
+    /* 检测堵转情况 */
+    if (abs(motor->targetSpeed) > 20 && abs(motor->currentSpeed) < 5)
+    {
+        motor->errorCounter++;
+        if (motor->errorCounter > 50)
+        { /* 连续50次检测到可能堵转 */
+            motor->flags.stalled = 1;
+        }
+    }
+    else
+    {
+        /* 恢复正常时重置计数器 */
+        motor->errorCounter = 0;
+    }
+
+    return speed;
 }
 
 /**
- * @brief 设置电机速度
+ * @brief 设置电机速度(简化接口)
  * @param motor: 电机结构体指针
- * @param speed: 目标速度
+ * @param speed: 速度(-100到100，负值表示反向)
  */
 void SetMotorSpeed(Motor_t *motor, int16_t speed)
 {
-  /* 更新目标速度 */
-  motor->targetSpeed = speed;
-  motor->pidController.targetValue = (float)speed;
+    /* 限制速度范围 */
+    if (speed > 100)
+        speed = 100;
+    if (speed < -100)
+        speed = -100;
 
-  /* 设置电机状态 */
-  if (speed > 0)
-  {
-    motor->state = MOTOR_FORWARD;
-  }
-  else if (speed < 0)
-  {
-    motor->state = MOTOR_BACKWARD;
-  }
-  else
-  {
-    motor->state = MOTOR_STOP;
-  }
+    /* 设置目标速度(用于PID控制) */
+    motor->targetSpeed = abs(speed);
+    motor->pidController.targetValue = (float)abs(speed);
 
-  /* 在实际系统中这里会处理PWM输出的设置 */
-  /* 此处仅作示意 */
+    /* 设置方向 */
+    if (speed >= 0)
+    {
+        motor->direction = MOTOR_DIR_FORWARD;
+        HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_RESET); /* 正向 */
+        motor->state = (speed > 0) ? MOTOR_FORWARD : MOTOR_STOP;
+    }
+    else
+    {
+        motor->direction = MOTOR_DIR_BACKWARD;
+        HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_SET); /* 反向 */
+        motor->state = MOTOR_BACKWARD;
+    }
+
+    /* 设置PWM百分比 */
+    motor->pwmPercent = abs(speed);
+
+    /* 计算PWM值(0-4095) */
+    uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
+
+    /* 通过I2C设置PWM */
+    if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
+    {
+        SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
+        osMutexRelease(i2cMutexHandle);
+    }
 }
 
 /**
@@ -562,21 +651,42 @@ void SetMotorSpeed(Motor_t *motor, int16_t speed)
  */
 void MotorSystemInit(void)
 {
-  /* 初始化系统状态 */
+    /* 初始化系统状态 */
     memset(&systemState, 0, sizeof(SystemState_t));
-    
-    /* 初始化四个电机 - 使用正确的定时器句柄 */
-    MotorInit(&systemState.motors[0], 0, &htim2, 1);
-    MotorInit(&systemState.motors[1], 1, &htim3, 2);
-    MotorInit(&systemState.motors[2], 2, &htim4, 3);
-    MotorInit(&systemState.motors[3], 3, &htim5, 4);
-    
-    /* 启动编码器定时器 */
+
+    /* 初始化PCA9685 */
+    if (osMutexAcquire(i2cMutexHandle, 100) == osOK)
+    {
+        if (PCA9685_Init(&hi2c1) != HAL_OK)
+        {
+            systemState.systemFlags.pca9685Error = 1;
+        }
+        osMutexRelease(i2cMutexHandle);
+    }
+
+    /* 初始化四个电机 - 使用简化接口 */
+    /* 注意：这里的GPIO端口和引脚需要根据实际硬件连接进行调整 */
+    MotorInit(&systemState.motors[0], 0, &htim2, 0, GPIOB, GPIO_PIN_0);
+    MotorInit(&systemState.motors[1], 1, &htim3, 1, GPIOB, GPIO_PIN_1);
+    MotorInit(&systemState.motors[2], 2, &htim4, 2, GPIOB, GPIO_PIN_2);
+    MotorInit(&systemState.motors[3], 3, &htim5, 3, GPIOB, GPIO_PIN_3);
+
+    /* 初始化八个舵机 - 简化接口 */
+    ServoInit(&systemState.servos[0], 0, 4);  /* 通道4 */
+    ServoInit(&systemState.servos[1], 1, 5);  /* 通道5 */
+    ServoInit(&systemState.servos[2], 2, 6);  /* 通道6 */
+    ServoInit(&systemState.servos[3], 3, 7);  /* 通道7 */
+    ServoInit(&systemState.servos[4], 4, 8);  /* 通道8 */
+    ServoInit(&systemState.servos[5], 5, 9);  /* 通道9 */
+    ServoInit(&systemState.servos[6], 6, 10); /* 通道10 */
+    ServoInit(&systemState.servos[7], 7, 11); /* 通道11 */
+
+    /* 启动编码器计数 */
     HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
     HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
     HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
     HAL_TIM_Encoder_Start(&htim5, TIM_CHANNEL_ALL);
-    
+
     /* 设置系统初始化标志 */
     systemState.systemFlags.initialized = 1;
 }
