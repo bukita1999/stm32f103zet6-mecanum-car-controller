@@ -762,25 +762,38 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
     motor->direction = MOTOR_DIR_FORWARD;
     HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_RESET); /* 正向 */
     motor->state = (pwmPercent > 0) ? MOTOR_FORWARD : MOTOR_STOP;
+
+    /* 设置PWM百分比 */
+    motor->pwmPercent = abs(pwmPercent);
+
+    /* 计算PWM值(0-4095) */
+    uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
+
+    /* 通过I2C设置PWM */
+    if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
+    {
+      SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
+      osMutexRelease(i2cMutexHandle);
+    }
   }
   else
   {
     motor->direction = MOTOR_DIR_BACKWARD;
     HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_SET); /* 反向 */
     motor->state = MOTOR_BACKWARD;
-  }
 
-  /* 设置PWM百分比 */
-  motor->pwmPercent = abs(pwmPercent);
+    /* 设置PWM百分比 */
+    motor->pwmPercent = abs(pwmPercent);
 
-  /* 计算PWM值(0-4095) */
-  uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
+    /* 计算PWM值(0-4095) */
+    uint16_t pwmValue = ((100 - motor->pwmPercent) * 4095) / 100;
 
-  /* 通过I2C设置PWM */
-  if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
-  {
-    SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
-    osMutexRelease(i2cMutexHandle);
+    /* 通过I2C设置PWM */
+    if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
+    {
+      SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
+      osMutexRelease(i2cMutexHandle);
+    }
   }
 }
 
@@ -830,10 +843,10 @@ void MotorSystemInit(void)
 
   /* 初始化四个电机 - 使用简化接口 */
   /* 注意：这里的GPIO端口和引脚需要根据实际硬件连接进行调整 */
-  MotorInit(&systemState.motors[0], 0, &htim2, 0, GPIOB, GPIO_PIN_0);
-  MotorInit(&systemState.motors[1], 1, &htim3, 1, GPIOB, GPIO_PIN_1);
-  MotorInit(&systemState.motors[2], 2, &htim4, 2, GPIOB, GPIO_PIN_2);
-  MotorInit(&systemState.motors[3], 3, &htim5, 3, GPIOB, GPIO_PIN_3);
+  MotorInit(&systemState.motors[0], 0, &htim2, 0, GPIOC, GPIO_PIN_0);
+  MotorInit(&systemState.motors[1], 1, &htim3, 1, GPIOC, GPIO_PIN_1);
+  MotorInit(&systemState.motors[2], 2, &htim4, 2, GPIOC, GPIO_PIN_2);
+  MotorInit(&systemState.motors[3], 3, &htim5, 3, GPIOC, GPIO_PIN_3);
 
   /* 初始化八个舵机 - 简化接口 */
   ServoInit(&systemState.servos[0], 0, 4);  /* 通道4 */
