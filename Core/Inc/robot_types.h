@@ -16,6 +16,17 @@ extern "C" {
 #define SERVO_MAX_PULSE         600     /* 最大脉冲宽度(对应180度) */
 #define SERVO_DEFAULT_ANGLE     90      /* 默认角度 */
 
+/* 电机PID控制参数 */
+#define MOTOR_PID_KP     0.5f    /* 初始比例系数 */
+#define MOTOR_PID_KI     0.1f    /* 初始积分系数 */
+#define MOTOR_PID_KD     0.01f   /* 初始微分系数 */
+#define MOTOR_PID_MIN    -100.0f /* PID输出下限 */
+#define MOTOR_PID_MAX    100.0f  /* PID输出上限 */
+
+/* 电机RPM参数 */
+#define MOTOR_MAX_RPM    10      /* 最大RPM值 */
+#define MOTOR_TARGET_RPM 8       /* 默认目标RPM值 */
+
 /* 舵机结构体定义 */
 typedef struct {
     uint8_t id;                /* 舵机ID (0-7) */
