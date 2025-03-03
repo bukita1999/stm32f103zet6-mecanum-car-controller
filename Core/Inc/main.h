@@ -69,6 +69,7 @@ void PIDInit(PIDController_t* pid, float kp, float ki, float kd, float min, floa
 float PIDCompute(PIDController_t* pid);
 int16_t CalculateMotorSpeed(Motor_t* motor, uint32_t deltaTime);
 void SetMotorSpeed(Motor_t* motor, int16_t speed);
+void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent);
 
 /* USER CODE END ET */
 

@@ -54,6 +54,10 @@ SystemState_t systemState;
 
 /* 用于UART发送的缓冲区 */
 char uartTxBuffer[128];
+
+/* 用于UART接收的缓冲区 */
+uint8_t rxBuffer[64];
+uint8_t rxIndex = 0;
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -263,9 +267,27 @@ void StartMotorControlTask(void *argument)
       if (osMutexAcquire(motorDataMutexHandle, 10) == osOK) {
         /* 计算当前电机速度 */
         CalculateMotorSpeed(&systemState.motors[i], deltaTime);
-
-        /* 注意：实际应用中这里会有PID控制逻辑，但为了测试PWM输出，我们省略这部分 */
-
+        
+        /* 添加PID控制逻辑 */
+        if (systemState.motors[i].state != MOTOR_STOP) {
+            /* 更新PID控制器的当前值 */
+            systemState.motors[i].pidController.currentValue = (float)abs(systemState.motors[i].currentSpeed);
+            
+            /* 计算PID输出 */
+            float pidOutput = PIDCompute(&systemState.motors[i].pidController);
+            
+            /* 应用PID输出到PWM百分比 */
+            int16_t newPwmPercent = (int16_t)pidOutput;
+            
+            /* 保持方向一致 */
+            if (systemState.motors[i].direction == MOTOR_DIR_BACKWARD) {
+                newPwmPercent = -newPwmPercent;
+            }
+            
+            /* 设置新的PWM值 */
+            SetMotorPWMPercentage(&systemState.motors[i], newPwmPercent);
+        }
+        
         /* 释放电机数据互斥量 */
         osMutexRelease(motorDataMutexHandle);
       } else {
@@ -369,16 +391,23 @@ void StartCommunicationTask(void *argument)
 {
     /* USER CODE BEGIN StartCommunicationTask */
     osDelay(100);
-
+    
+    /* 用于接收UART数据的缓冲区 */
+    uint8_t rxBuffer[64];
+    uint8_t rxIndex = 0;
+    
+    /* 启动UART接收 */
+    HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+    
     /* Infinite loop */
     for (;;)
     {
         /* 等待电机数据更新事件 */
         uint32_t eventFlag = osEventFlagsWait(systemEventGroupHandle,
-                                              EVENT_MOTOR_UPDATE,
-                                              osFlagsWaitAny,
-                                              100);
-
+                                             EVENT_MOTOR_UPDATE,
+                                             osFlagsWaitAny,
+                                             100);
+        
         /* 如果事件触发 */
         if ((eventFlag & EVENT_MOTOR_UPDATE) == EVENT_MOTOR_UPDATE)
         {
@@ -387,19 +416,63 @@ void StartCommunicationTask(void *argument)
             {
                 /* 格式化电机速度数据 */
                 int len = sprintf(uartTxBuffer, "SPD,%d,%d,%d,%d\r\n",
-                                  systemState.motors[0].currentSpeed,
-                                  systemState.motors[1].currentSpeed,
-                                  systemState.motors[2].currentSpeed,
-                                  systemState.motors[3].currentSpeed);
-
+                                 systemState.motors[0].currentSpeed,
+                                 systemState.motors[1].currentSpeed,
+                                 systemState.motors[2].currentSpeed,
+                                 systemState.motors[3].currentSpeed);
+                
                 /* 释放电机数据互斥量 */
                 osMutexRelease(motorDataMutexHandle);
-
+                
                 /* 通过UART发送数据 */
                 HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
             }
         }
-        osDelay(500);
+        
+        /* 处理接收到的命令 */
+        if (rxIndex > 0) {
+            /* 确保字符串以null结尾 */
+            rxBuffer[rxIndex] = 0;
+            
+            /* 检查是否为速度设置命令 "$SPD" */
+            if (rxIndex >= 5 && rxBuffer[0] == '$' && rxBuffer[1] == 'S' && 
+                rxBuffer[2] == 'P' && rxBuffer[3] == 'D' && rxBuffer[4] == ',') {
+                
+                /* 解析电机速度设置命令 */
+                char *token = strtok((char*)&rxBuffer[5], ",");
+                int motorId = 0;
+                
+                while (token != NULL && motorId < 4) {
+                    int16_t targetSpeed = atoi(token);
+                    
+                    /* 请求电机数据互斥量 */
+                    if (osMutexAcquire(motorDataMutexHandle, 10) == osOK) {
+                        /* 设置目标速度 */
+                        SetMotorSpeed(&systemState.motors[motorId], targetSpeed);
+                        
+                        /* 释放电机数据互斥量 */
+                        osMutexRelease(motorDataMutexHandle);
+                        
+                        /* 确认命令接收 */
+                        int len = sprintf(uartTxBuffer, "ACK,M%d,%d\r\n", 
+                                         motorId, targetSpeed);
+                        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+                    }
+                    
+                    /* 获取下一个token */
+                    token = strtok(NULL, ",");
+                    motorId++;
+                }
+            }
+            
+            /* 重置接收索引 */
+            rxIndex = 0;
+            
+            /* 重新启动接收 */
+            HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+        }
+        
+        osDelay(50);  /* 降低处理频率，减少CPU占用 */
     }
     /* USER CODE END StartCommunicationTask */
 }
@@ -606,24 +679,20 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
  * @param motor: 电机结构体指针
  * @param speed: 速度(-100到100，负值表示反向)
  */
-void SetMotorSpeed(Motor_t *motor, int16_t speed)
+void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
 {
     /* 限制速度范围 */
-    if (speed > 100)
-        speed = 100;
-    if (speed < -100)
-        speed = -100;
-
-    /* 设置目标速度(用于PID控制) */
-    motor->targetSpeed = abs(speed);
-    motor->pidController.targetValue = (float)abs(speed);
-
+    if (pwmPercent > 100)
+        pwmPercent = 100;
+    if (pwmPercent < -100)
+        pwmPercent = -100;
+    
     /* 设置方向 */
-    if (speed >= 0)
+    if (pwmPercent >= 0)
     {
         motor->direction = MOTOR_DIR_FORWARD;
         HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_RESET); /* 正向 */
-        motor->state = (speed > 0) ? MOTOR_FORWARD : MOTOR_STOP;
+        motor->state = (pwmPercent > 0) ? MOTOR_FORWARD : MOTOR_STOP;
     }
     else
     {
@@ -631,19 +700,45 @@ void SetMotorSpeed(Motor_t *motor, int16_t speed)
         HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_SET); /* 反向 */
         motor->state = MOTOR_BACKWARD;
     }
-
+    
     /* 设置PWM百分比 */
-    motor->pwmPercent = abs(speed);
-
+    motor->pwmPercent = abs(pwmPercent);
+    
     /* 计算PWM值(0-4095) */
     uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
-
+    
     /* 通过I2C设置PWM */
     if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
     {
         SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
         osMutexRelease(i2cMutexHandle);
     }
+}
+
+/**
+ * @brief 设置电机目标速度
+ * @param motor: 电机结构体指针
+ * @param speed: 目标速度(RPM，负值表示反向)
+ */
+void SetMotorSpeed(Motor_t *motor, int16_t speed)
+{
+    /* 设置目标速度(用于PID控制) */
+    motor->targetSpeed = abs(speed);
+    motor->pidController.targetValue = (float)abs(speed);
+    
+    /* 设置方向标志 */
+    motor->direction = (speed >= 0) ? MOTOR_DIR_FORWARD : MOTOR_DIR_BACKWARD;
+    
+    /* 更新电机状态 */
+    if (speed > 0)
+        motor->state = MOTOR_FORWARD;
+    else if (speed < 0)
+        motor->state = MOTOR_BACKWARD;
+    else
+        motor->state = MOTOR_STOP;
+    
+    /* 初始PWM设置 - 后续由PID控制器调整 */
+    /* 此处可以设置一个估计的初始PWM值，或者保持当前值让PID控制器逐渐调整 */
 }
 
 /**
@@ -692,3 +787,34 @@ void MotorSystemInit(void)
 }
 
 /* USER CODE END Application */
+
+/**
+ * @brief UART接收完成回调函数
+ * @param huart: UART句柄
+ */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    extern uint8_t rxBuffer[64];
+    extern uint8_t rxIndex;
+    
+    if (huart->Instance == USART1) {
+        /* 处理接收到的字符 */
+        if (rxBuffer[rxIndex] == '\n' || rxBuffer[rxIndex] == '\r') {
+            /* 命令结束，准备处理 */
+            if (rxIndex > 0) {
+                /* 命令处理由通信任务完成 */
+            } else {
+                /* 空命令，重新开始接收 */
+                HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+            }
+        } else {
+            /* 继续接收下一个字符 */
+            rxIndex++;
+            if (rxIndex >= 64) {
+                /* 缓冲区已满，重置 */
+                rxIndex = 0;
+            }
+            HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+        }
+    }
+}
