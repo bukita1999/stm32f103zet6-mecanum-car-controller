@@ -433,23 +433,24 @@ void StartCommunicationTask(void *argument)
   /* USER CODE BEGIN StartCommunicationTask */
   osDelay(100);
 
-  /* 用于接收UART数据的缓冲区 */
-  uint8_t rxBuffer[64];
-  uint8_t rxIndex = 0;
-
-  /* 启动UART接收 */
+  /* 初始化接收 */
+  rxIndex = 0;
+  memset(rxBuffer, 0, sizeof(rxBuffer));
   HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
 
-  /* Infinite loop */
+  /* 提示信息 */
+  HAL_UART_Transmit(&huart1, (uint8_t *)"Communication task started\r\n", 28, 100);
+
+  /* 任务主循环 */
   for (;;)
   {
-    /* 等待电机数据更新事件 */
+    /* 等待电机数据更新事件或通信事件 */
     uint32_t eventFlag = osEventFlagsWait(systemEventGroupHandle,
-                                          EVENT_MOTOR_UPDATE,
+                                          EVENT_MOTOR_UPDATE | EVENT_COMMUNICATION,
                                           osFlagsWaitAny,
                                           100);
 
-    /* 如果事件触发 */
+    /* 如果电机更新事件触发 */
     if ((eventFlag & EVENT_MOTOR_UPDATE) == EVENT_MOTOR_UPDATE)
     {
       /* 请求电机数据互斥量 */
@@ -466,107 +467,110 @@ void StartCommunicationTask(void *argument)
         osMutexRelease(motorDataMutexHandle);
 
         /* 通过UART发送数据 */
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+        //HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
       }
     }
 
     /* 处理接收到的命令 */
-    if (rxIndex > 0)
+    if ((eventFlag & EVENT_COMMUNICATION) == EVENT_COMMUNICATION)
     {
-      /* 确保字符串以null结尾 */
-      rxBuffer[rxIndex] = 0;
-
-      /* 检查是否为速度设置命令 "$SPD" */
-      if (rxIndex >= 5 && rxBuffer[0] == '$' && rxBuffer[1] == 'S' &&
-          rxBuffer[2] == 'P' && rxBuffer[3] == 'D' && rxBuffer[4] == ',')
+      /* 保证字符串结束 */
+      rxBuffer[rxIndex] = '\0';
+      
+      /* 只有接收到完整命令(#结尾)才处理 */
+      if (rxIndex >= 1 && rxBuffer[rxIndex-1] == '#')
       {
-
-        /* 解析电机速度设置命令 */
-        char *token = strtok((char *)&rxBuffer[5], ",");
-        int motorId = 0;
-
-        while (token != NULL && motorId < 4)
+        /* 清除结束符，便于后续处理 */
+        rxBuffer[rxIndex-1] = '\0';
+        
+        /* 处理电机速度命令 */
+        if (rxBuffer[0] == '$' && rxBuffer[1] == 'S' && rxBuffer[2] == 'P' && 
+            rxBuffer[3] == 'D' && rxBuffer[4] == ',')
         {
-          int16_t targetSpeed = atoi(token);
-
-          /* 请求电机数据互斥量 */
-          if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
+          /* 输出接收到的命令用于调试 */
+          int len = sprintf(uartTxBuffer, "Received: %s#\r\n", rxBuffer);
+          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+          
+          /* 解析命令参数 */
+          char *token = strtok((char *)&rxBuffer[5], ",");
+          int motorId = 0;
+          
+          while (token != NULL && motorId < 4)
           {
-            /* 设置目标速度 */
-            SetMotorSpeed(&systemState.motors[motorId], targetSpeed);
-
-            /* 释放电机数据互斥量 */
-            osMutexRelease(motorDataMutexHandle);
-
-            /* 确认命令接收 */
-            int len = sprintf(uartTxBuffer, "ACK,M%d,%d\r\n",
-                              motorId, targetSpeed);
-            HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
-          }
-
-          /* 获取下一个token */
-          token = strtok(NULL, ",");
-          motorId++;
-        }
-      }
-
-      /* 检查是否为PID参数设置命令 "$PID" */
-      if (rxIndex >= 5 && rxBuffer[0] == '$' && rxBuffer[1] == 'P' &&
-          rxBuffer[2] == 'I' && rxBuffer[3] == 'D' && rxBuffer[4] == ',')
-      {
-
-        /* 解析PID参数设置命令: $PID,motorId,Kp,Ki,Kd */
-        char *token = strtok((char *)&rxBuffer[5], ",");
-
-        if (token != NULL)
-        {
-          int motorId = atoi(token);
-          token = strtok(NULL, ",");
-
-          if (token != NULL && motorId >= 0 && motorId < 4)
-          {
-            float kp = atof(token);
-            token = strtok(NULL, ",");
-
-            if (token != NULL)
+            int16_t speed = atoi(token);
+            
+            /* 设置电机速度 */
+            if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
             {
-              float ki = atof(token);
+              SetMotorSpeed(&systemState.motors[motorId], speed);
+              osMutexRelease(motorDataMutexHandle);
+              
+              /* 确认消息 */
+              len = sprintf(uartTxBuffer, "ACK,M%d,%d\r\n", motorId, speed);
+              HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+            }
+            
+            token = strtok(NULL, ",");
+            motorId++;
+          }
+        }
+        /* 处理PID参数设置命令 */
+        else if (rxBuffer[0] == '$' && rxBuffer[1] == 'P' && rxBuffer[2] == 'I' && 
+                 rxBuffer[3] == 'D' && rxBuffer[4] == ',')
+        {
+          /* 输出接收到的命令用于调试 */
+          int len = sprintf(uartTxBuffer, "Received: %s#\r\n", rxBuffer);
+          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+          
+          /* 解析PID参数设置命令: $PID,motorId,Kp,Ki,Kd */
+          char *token = strtok((char *)&rxBuffer[5], ",");
+          
+          if (token != NULL)
+          {
+            int motorId = atoi(token);
+            token = strtok(NULL, ",");
+            
+            if (token != NULL && motorId >= 0 && motorId < 4)
+            {
+              float kp = atof(token);
               token = strtok(NULL, ",");
-
+              
               if (token != NULL)
               {
-                float kd = atof(token);
-
-                /* 请求电机数据互斥量 */
-                if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
+                float ki = atof(token);
+                token = strtok(NULL, ",");
+                
+                if (token != NULL)
                 {
+                  float kd = atof(token);
+                  
                   /* 更新PID参数 */
-                  systemState.motors[motorId].pidController.Kp = kp;
-                  systemState.motors[motorId].pidController.Ki = ki;
-                  systemState.motors[motorId].pidController.Kd = kd;
-
-                  /* 释放电机数据互斥量 */
-                  osMutexRelease(motorDataMutexHandle);
-
-                  /* 确认命令接收 */
-                  int len = sprintf(uartTxBuffer, "PID,M%d,%.2f,%.2f,%.2f\r\n",
-                                    motorId, kp, ki, kd);
-                  HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+                  if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
+                  {
+                    systemState.motors[motorId].pidController.Kp = kp;
+                    systemState.motors[motorId].pidController.Ki = ki;
+                    systemState.motors[motorId].pidController.Kd = kd;
+                    osMutexRelease(motorDataMutexHandle);
+                    
+                    /* 确认命令接收 */
+                    len = sprintf(uartTxBuffer, "PID,M%d,%.2f,%.2f,%.2f\r\n",
+                                        motorId, kp, ki, kd);
+                    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+                  }
                 }
               }
             }
           }
         }
       }
-
-      /* 重置接收索引 */
+      
+      /* 命令处理完成，清除缓冲区并重启接收 */
+      memset(rxBuffer, 0, sizeof(rxBuffer));
       rxIndex = 0;
-
-      /* 重新启动接收 */
       HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
     }
-
-    osDelay(50); /* 降低处理频率，减少CPU占用 */
+    
+    osDelay(10);
   }
   /* USER CODE END StartCommunicationTask */
 }
@@ -899,22 +903,23 @@ void MotorSystemInit(void)
   */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  if(huart->Instance == USART1)
+  if (huart->Instance == USART1)
   {
-    /* 收到一个字符后增加索引 */
+    /* 更新索引 */
     rxIndex++;
     
-    /* 检查是否收到完整命令或缓冲区即将溢出 */
-    if (rxBuffer[rxIndex-1] == '\n' || rxIndex >= sizeof(rxBuffer) - 1)
+    /* 检查是否收到结束符'#'或缓冲区将满 */
+    if (rxBuffer[rxIndex-1] == '#' || rxIndex >= sizeof(rxBuffer) - 2)
     {
-      /* 命令接收完成，让通信任务处理 */
-      osEventFlagsSet(systemEventGroupHandle, EVENT_COMMUNICATION); // 设置通信事件标志
+      /* 设置事件标志，通知任务处理命令 */
+      osEventFlagsSet(systemEventGroupHandle, EVENT_COMMUNICATION);
     }
-    
-    /* 无论是否收到完整命令，都继续接收下一个字符 */
-    HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex >= sizeof(rxBuffer) - 1 ? 0 : rxIndex], 1);
+    else
+    {
+      /* 继续接收下一个字符 */
+      HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+    }
   }
 }
 
 /* USER CODE END Application */
-
