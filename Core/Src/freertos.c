@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include "pca9685.h"
 #include "i2c.h"
+#include "usart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,62 +63,68 @@ uint8_t rxIndex = 0;
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
-    .name = "defaultTask",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t)osPriorityLow,
+  .name = "defaultTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for MotorControlTas */
 osThreadId_t MotorControlTasHandle;
 const osThreadAttr_t MotorControlTas_attributes = {
-    .name = "MotorControlTas",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t)osPriorityLow,
+  .name = "MotorControlTas",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for ServoControlTas */
 osThreadId_t ServoControlTasHandle;
 const osThreadAttr_t ServoControlTas_attributes = {
-    .name = "ServoControlTas",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t)osPriorityLow,
+  .name = "ServoControlTas",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for CommunicationTa */
 osThreadId_t CommunicationTaHandle;
 const osThreadAttr_t CommunicationTa_attributes = {
-    .name = "CommunicationTa",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t)osPriorityLow,
+  .name = "CommunicationTa",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for MonitorTask */
 osThreadId_t MonitorTaskHandle;
 const osThreadAttr_t MonitorTask_attributes = {
-    .name = "MonitorTask",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t)osPriorityLow,
+  .name = "MonitorTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for commandQueue */
 osMessageQueueId_t commandQueueHandle;
 const osMessageQueueAttr_t commandQueue_attributes = {
-    .name = "commandQueue"};
+  .name = "commandQueue"
+};
 /* Definitions for motorDataMutex */
 osMutexId_t motorDataMutexHandle;
 const osMutexAttr_t motorDataMutex_attributes = {
-    .name = "motorDataMutex"};
+  .name = "motorDataMutex"
+};
 /* Definitions for servoDataMutex */
 osMutexId_t servoDataMutexHandle;
 const osMutexAttr_t servoDataMutex_attributes = {
-    .name = "servoDataMutex"};
+  .name = "servoDataMutex"
+};
 /* Definitions for i2cMutex */
 osMutexId_t i2cMutexHandle;
 const osMutexAttr_t i2cMutex_attributes = {
-    .name = "i2cMutex"};
+  .name = "i2cMutex"
+};
 /* Definitions for statusSemaphore */
 osSemaphoreId_t statusSemaphoreHandle;
 const osSemaphoreAttr_t statusSemaphore_attributes = {
-    .name = "statusSemaphore"};
+  .name = "statusSemaphore"
+};
 /* Definitions for systemEventGroup */
 osEventFlagsId_t systemEventGroupHandle;
 const osEventFlagsAttr_t systemEventGroup_attributes = {
-    .name = "systemEventGroup"};
+  .name = "systemEventGroup"
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -133,12 +140,11 @@ void StartMonitorTask(void *argument);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
- * @brief  FreeRTOS initialization
- * @param  None
- * @retval None
- */
-void MX_FREERTOS_Init(void)
-{
+  * @brief  FreeRTOS initialization
+  * @param  None
+  * @retval None
+  */
+void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
@@ -170,7 +176,7 @@ void MX_FREERTOS_Init(void)
 
   /* Create the queue(s) */
   /* creation of commandQueue */
-  commandQueueHandle = osMessageQueueNew(16, sizeof(uint16_t), &commandQueue_attributes);
+  commandQueueHandle = osMessageQueueNew (16, sizeof(uint16_t), &commandQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -202,6 +208,7 @@ void MX_FREERTOS_Init(void)
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
+
 }
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -243,17 +250,25 @@ void StartMotorControlTask(void *argument)
   /* 初始化任务时间戳 */
   lastWakeTime = osKernelGetTickCount();
 
-  /* 设置第一个电机的PWM占空比为50%，方向为正向 */
-  /* 这将产生50%占空比的PWM信号，在PCA9685上对应2048计数值 */
-  if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
+  /* 初始化所有电机的目标速度和PID参数 */
+  for (uint8_t i = 0; i < 4; i++)
   {
-    SetMotorSpeed(&systemState.motors[0], 50);
-    osMutexRelease(motorDataMutexHandle);
+    if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
+    {
+      /* 初始化PID控制器参数 - 根据实际电机特性调整 */
+      systemState.motors[i].pidController.Kp = MOTOR_PID_KP;
+      systemState.motors[i].pidController.Ki = MOTOR_PID_KI;
+      systemState.motors[i].pidController.Kd = MOTOR_PID_KD;
 
-    /* 输出调试信息 */
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor1 set to 50%% PWM, direction: forward\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+      /* 设置初始目标速度为0 */
+      SetMotorSpeed(&systemState.motors[i], 0);
+      osMutexRelease(motorDataMutexHandle);
+    }
   }
+
+  /* 输出调试信息 */
+  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor control task started, PID velocity control enabled for all motors\r\n");
+  HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
 
   /* 无限循环 */
   for (;;)
@@ -292,6 +307,11 @@ void StartMotorControlTask(void *argument)
           /* 设置新的PWM值 */
           SetMotorPWMPercentage(&systemState.motors[i], newPwmPercent);
         }
+        else
+        {
+          /* 如果电机停止，确保PWM为0 */
+          SetMotorPWMPercentage(&systemState.motors[i], 0);
+        }
 
         /* 释放电机数据互斥量 */
         osMutexRelease(motorDataMutexHandle);
@@ -303,20 +323,26 @@ void StartMotorControlTask(void *argument)
       }
     }
 
-    /* 每5秒输出一次电机1的状态 */
+    /* 每5秒输出一次所有电机的状态 */
     if ((currentTime - lastReportTime) > 5000)
     {
       lastReportTime = currentTime;
 
-      if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
+      for (uint8_t i = 0; i < 4; i++)
       {
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer),
-                 "Motor1: %d RPM, PWM: %d%%\r\n",
-                 systemState.motors[0].currentSpeed,
-                 systemState.motors[0].pwmPercent);
-        osMutexRelease(motorDataMutexHandle);
-
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+        if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
+        {
+          snprintf(uartTxBuffer, sizeof(uartTxBuffer),
+                   "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%.2f\r\n",
+                   i + 1, 
+                   systemState.motors[i].targetSpeed,
+                   systemState.motors[i].currentSpeed,
+                   systemState.motors[i].pwmPercent,
+                   systemState.motors[i].pidController.error);
+          
+          osMutexRelease(motorDataMutexHandle);
+          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+        }
       }
     }
 
@@ -868,4 +894,27 @@ void MotorSystemInit(void)
   systemState.systemFlags.initialized = 1;
 }
 
+/**
+  * @brief UART接收完成回调
+  */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if(huart->Instance == USART1)
+  {
+    /* 收到一个字符后增加索引 */
+    rxIndex++;
+    
+    /* 检查是否收到完整命令或缓冲区即将溢出 */
+    if (rxBuffer[rxIndex-1] == '\n' || rxIndex >= sizeof(rxBuffer) - 1)
+    {
+      /* 命令接收完成，让通信任务处理 */
+      osEventFlagsSet(systemEventGroupHandle, EVENT_COMMUNICATION); // 设置通信事件标志
+    }
+    
+    /* 无论是否收到完整命令，都继续接收下一个字符 */
+    HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex >= sizeof(rxBuffer) - 1 ? 0 : rxIndex], 1);
+  }
+}
+
 /* USER CODE END Application */
+
