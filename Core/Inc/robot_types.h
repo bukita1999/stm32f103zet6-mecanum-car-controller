@@ -17,7 +17,7 @@ extern "C" {
 #define SERVO_DEFAULT_ANGLE     90      /* 默认角度 */
 
 /* 电机PID控制参数 */
-#define MOTOR_PID_KP     2    /* 初始比例系数 */
+#define MOTOR_PID_KP     4    /* 初始比例系数 */
 #define MOTOR_PID_KI     1    /* 初始积分系数 */
 #define MOTOR_PID_KD     0   /* 初始微分系数 */
 #define MOTOR_PID_MIN    -100.0f /* PID输出下限 */

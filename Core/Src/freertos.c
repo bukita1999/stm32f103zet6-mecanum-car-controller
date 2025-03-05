@@ -245,7 +245,7 @@ void StartMotorControlTask(void *argument)
   /* 任务时间戳变量 */
   uint32_t lastWakeTime;
   uint32_t currentTime;
-  static uint32_t lastReportTime = 0;
+  //static uint32_t lastReportTime = 0;
 
   /* 初始化任务时间戳 */
   lastWakeTime = osKernelGetTickCount();
@@ -321,28 +321,6 @@ void StartMotorControlTask(void *argument)
       }
     }
 
-    /* 每5秒输出一次所有电机的状态 */
-    if ((currentTime - lastReportTime) > 5000)
-    {
-      lastReportTime = currentTime;
-
-      for (uint8_t i = 0; i < 4; i++)
-      {
-        if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
-        {
-          snprintf(uartTxBuffer, sizeof(uartTxBuffer),
-                   "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%.2f\r\n",
-                   i + 1, 
-                   systemState.motors[i].targetSpeed,
-                   systemState.motors[i].currentSpeed,
-                   systemState.motors[i].pwmPercent,
-                   systemState.motors[i].pidController.error);
-          
-          osMutexRelease(motorDataMutexHandle);
-          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        }
-      }
-    }
 
     /* 触发电机数据更新事件 */
     osEventFlagsSet(systemEventGroupHandle, EVENT_MOTOR_UPDATE);
@@ -583,10 +561,57 @@ void StartCommunicationTask(void *argument)
 void StartMonitorTask(void *argument)
 {
   /* USER CODE BEGIN StartMonitorTask */
-  /* Infinite loop */
+  
+  /* 等待系统初始化完成 */
+  osDelay(500);
+  
+  uint32_t lastReportTime = 0;
+  
+  /* 无限循环 */
   for (;;)
   {
-    osDelay(1);
+    uint32_t currentTime = osKernelGetTickCount();
+    
+    /* 每5秒报告一次电机状态 */
+    if ((currentTime - lastReportTime) > 1000)
+    {
+      lastReportTime = currentTime;
+      
+      /* 获取电机数据 */
+      if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
+      {
+        /* 报告所有电机状态 */
+        for (uint8_t i = 0; i < 4; i++)
+        {
+          snprintf(uartTxBuffer, sizeof(uartTxBuffer),
+                  "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%.2f\r\n",
+                  i + 1, 
+                  systemState.motors[i].targetSpeed,
+                  systemState.motors[i].currentSpeed,
+                  systemState.motors[i].pwmPercent,
+                  systemState.motors[i].pidController.error);
+          
+          /* 释放互斥量发送期间，避免长时间占用 */
+          osMutexRelease(motorDataMutexHandle);
+          
+          /* 发送数据 */
+          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+          
+          /* 短暂延时，避免UART缓冲区溢出 */
+          osDelay(20);
+          
+          /* 重新获取互斥量继续处理 */
+          osMutexAcquire(motorDataMutexHandle, 100);
+        }
+        
+        osMutexRelease(motorDataMutexHandle);
+      }
+      
+      /* 可以添加其他系统参数监控，如温度、电压等 */
+    }
+    
+    /* 监控任务周期 */
+    osDelay(100);
   }
   /* USER CODE END StartMonitorTask */
 }
