@@ -256,9 +256,9 @@ void StartMotorControlTask(void *argument)
     if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
     {
       /* 初始化PID控制器参数 - 根据实际电机特性调整 */
-      systemState.motors[i].pidController.Kp = MOTOR_PID_KP;
-      systemState.motors[i].pidController.Ki = MOTOR_PID_KI;
-      systemState.motors[i].pidController.Kd = MOTOR_PID_KD;
+      PIDInit(&systemState.motors[i].pidController, 
+              MOTOR_PID_KP, MOTOR_PID_KI, MOTOR_PID_KD, 
+              -100, 100); // 输出范围为-100到100，对应PWM百分比
 
       /* 设置初始目标速度为0 */
       SetMotorSpeed(&systemState.motors[i], 0);
@@ -539,7 +539,7 @@ void StartCommunicationTask(void *argument)
               {
                 float ki = atof(token);
                 token = strtok(NULL, ",");
-                
+              
                 if (token != NULL)
                 {
                   float kd = atof(token);
@@ -630,39 +630,35 @@ void PIDInit(PIDController_t *pid, float kp, float ki, float kd, float min, floa
  * @param pid: PID控制器结构体指针
  * @return float: PID计算结果
  */
-float PIDCompute(PIDController_t *pid)
+float PIDCompute(PIDController_t *pid, float deltaTimeSeconds)
 {
   /* 计算误差 */
   pid->error = pid->targetValue - pid->currentValue;
 
-  /* 计算积分项 */
-  pid->errorSum += pid->error;
+  /* 计算积分项(考虑时间) */
+  pid->errorSum += pid->error * deltaTimeSeconds;
 
   /* 防止积分饱和 */
   if (pid->errorSum > pid->outputMax)
-  {
     pid->errorSum = pid->outputMax;
-  }
   else if (pid->errorSum < pid->outputMin)
-  {
     pid->errorSum = pid->outputMin;
-  }
 
-  /* 计算微分项 */
-  float errorDiff = pid->error - pid->lastError;
+  /* 计算微分项(考虑时间) */
+  float errorDiff = 0;
+  if (deltaTimeSeconds > 0)
+    errorDiff = (pid->error - pid->lastError) / deltaTimeSeconds;
 
   /* 计算PID输出 */
-  pid->output = pid->Kp * pid->error + pid->Ki * pid->errorSum + pid->Kd * errorDiff;
+  pid->output = pid->Kp * pid->error + 
+                pid->Ki * pid->errorSum + 
+                pid->Kd * errorDiff;
 
   /* 输出限幅 */
   if (pid->output > pid->outputMax)
-  {
     pid->output = pid->outputMax;
-  }
   else if (pid->output < pid->outputMin)
-  {
     pid->output = pid->outputMin;
-  }
 
   /* 保存当前误差 */
   pid->lastError = pid->error;
@@ -773,11 +769,6 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
   return speed;
 }
 
-/**
- * @brief 设置电机速度(简化接口)
- * @param motor: 电机结构体指针
- * @param speed: 速度(-100到100，负值表示反向)
- */
 void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
 {
   /* 限制速度范围 */
@@ -815,8 +806,8 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
     /* 设置PWM百分比 */
     motor->pwmPercent = abs(pwmPercent);
 
-    /* 计算PWM值(0-4095) */
-    uint16_t pwmValue = ((100 - motor->pwmPercent) * 4095) / 100;
+    /* 计算PWM值(0-4095) - 修正计算 */
+    uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
 
     /* 通过I2C设置PWM */
     if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
@@ -827,11 +818,6 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
   }
 }
 
-/**
- * @brief 设置电机目标速度
- * @param motor: 电机结构体指针
- * @param speed: 目标速度(RPM，负值表示反向)
- */
 void SetMotorSpeed(Motor_t *motor, int16_t speed)
 {
   /* 设置目标速度(用于PID控制) */
@@ -849,8 +835,13 @@ void SetMotorSpeed(Motor_t *motor, int16_t speed)
   else
     motor->state = MOTOR_STOP;
 
-  /* 初始PWM设置 - 后续由PID控制器调整 */
-  /* 此处可以设置一个估计的初始PWM值，或者保持当前值让PID控制器逐渐调整 */
+  /* 添加初始PWM设置 */
+  int16_t initialPwm = speed / 2; // 一个简单的估算，可以根据实际情况调整
+  if (initialPwm > 100) initialPwm = 100;
+  if (initialPwm < -100) initialPwm = -100;
+  
+  /* 设置初始PWM */
+  SetMotorPWMPercentage(motor, initialPwm);
 }
 
 /**
