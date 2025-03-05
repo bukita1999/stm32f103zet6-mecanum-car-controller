@@ -293,7 +293,7 @@ void StartMotorControlTask(void *argument)
           systemState.motors[i].pidController.currentValue = (float)abs(systemState.motors[i].currentSpeed);
 
           /* 计算PID输出 */
-          float pidOutput = PIDCompute(&systemState.motors[i].pidController);
+          float pidOutput = PIDCompute(&systemState.motors[i].pidController, (float)deltaTime / 1000.0f);
 
           /* 应用PID输出到PWM百分比 */
           int16_t newPwmPercent = (int16_t)pidOutput;
@@ -457,11 +457,11 @@ void StartCommunicationTask(void *argument)
       if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
       {
         /* 格式化电机速度数据 */
-        int len = sprintf(uartTxBuffer, "SPD,%d,%d,%d,%d\r\n",
-                          systemState.motors[0].currentSpeed,
-                          systemState.motors[1].currentSpeed,
-                          systemState.motors[2].currentSpeed,
-                          systemState.motors[3].currentSpeed);
+//        int len = sprintf(uartTxBuffer, "SPD,%d,%d,%d,%d\r\n",
+//                          systemState.motors[0].currentSpeed,
+//                          systemState.motors[1].currentSpeed,
+//                          systemState.motors[2].currentSpeed,
+//                          systemState.motors[3].currentSpeed);
 
         /* 释放电机数据互斥量 */
         osMutexRelease(motorDataMutexHandle);
@@ -914,3 +914,4 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
 
 /* USER CODE END Application */
+

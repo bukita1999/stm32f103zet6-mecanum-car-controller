@@ -66,7 +66,7 @@ void MotorSystemInit(void);
 void MotorInit(Motor_t* motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint8_t pwmChannel, 
                GPIO_TypeDef* dirPort, uint16_t dirPin);
 void PIDInit(PIDController_t* pid, float kp, float ki, float kd, float min, float max);
-float PIDCompute(PIDController_t* pid);
+float PIDCompute(PIDController_t* pid, float deltaTimeSeconds);
 int16_t CalculateMotorSpeed(Motor_t* motor, uint32_t deltaTime);
 void SetMotorSpeed(Motor_t* motor, int16_t speed);
 void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent);
@@ -93,14 +93,22 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define LED_DS1_Pin GPIO_PIN_5
 #define LED_DS1_GPIO_Port GPIOE
-#define MOTOR1_DIR_Pin GPIO_PIN_0
-#define MOTOR1_DIR_GPIO_Port GPIOC
-#define MOTOR2_DIR_Pin GPIO_PIN_1
-#define MOTOR2_DIR_GPIO_Port GPIOC
-#define MOTOR3_DIR_Pin GPIO_PIN_2
-#define MOTOR3_DIR_GPIO_Port GPIOC
-#define MOTOR4_DIR_Pin GPIO_PIN_3
-#define MOTOR4_DIR_GPIO_Port GPIOC
+#define MOTOR1_DIR1_Pin GPIO_PIN_0
+#define MOTOR1_DIR1_GPIO_Port GPIOF
+#define MOTOR2_DIR1_Pin GPIO_PIN_1
+#define MOTOR2_DIR1_GPIO_Port GPIOF
+#define MOTOR3_DIR1_Pin GPIO_PIN_2
+#define MOTOR3_DIR1_GPIO_Port GPIOF
+#define MOTOR4_DIR1_Pin GPIO_PIN_3
+#define MOTOR4_DIR1_GPIO_Port GPIOF
+#define MOTOR1_DIR0_Pin GPIO_PIN_0
+#define MOTOR1_DIR0_GPIO_Port GPIOC
+#define MOTOR2_DIR0_Pin GPIO_PIN_1
+#define MOTOR2_DIR0_GPIO_Port GPIOC
+#define MOTOR3_DIR0_Pin GPIO_PIN_2
+#define MOTOR3_DIR0_GPIO_Port GPIOC
+#define MOTOR4_DIR0_Pin GPIO_PIN_3
+#define MOTOR4_DIR0_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 
