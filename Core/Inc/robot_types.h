@@ -77,8 +77,13 @@ typedef struct {
     uint32_t lastUpdateTime;   /* 上次更新时间 (ms) */
     TIM_HandleTypeDef* encoderTimer; /* 编码器定时器 */
     uint8_t pwmChannel;        /* PCA9685 PWM通道 */
-    GPIO_TypeDef* dirPort;     /* 方向控制GPIO端口 */
-    uint16_t dirPin;           /* 方向控制GPIO引脚 */
+    
+    /* 修改方向控制为两个引脚 */
+    GPIO_TypeDef* dir0Port;    /* 方向0控制GPIO端口 (IN1) */
+    uint16_t dir0Pin;          /* 方向0控制GPIO引脚 (IN1) */
+    GPIO_TypeDef* dir1Port;    /* 方向1控制GPIO端口 (IN2) */
+    uint16_t dir1Pin;          /* 方向1控制GPIO引脚 (IN2) */
+    
     PIDController_t pidController; /* 速度PID控制器 */
     uint8_t errorCounter;      /* 错误计数器 */
     struct {

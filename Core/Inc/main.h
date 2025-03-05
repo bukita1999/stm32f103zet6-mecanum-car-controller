@@ -63,8 +63,9 @@ extern TIM_HandleTypeDef htim5;
 
 /* 函数声明 */
 void MotorSystemInit(void);
-void MotorInit(Motor_t* motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint8_t pwmChannel, 
-               GPIO_TypeDef* dirPort, uint16_t dirPin);
+void MotorInit(Motor_t* motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint8_t pwmChannel,
+               GPIO_TypeDef* dir0Port, uint16_t dir0Pin, 
+               GPIO_TypeDef* dir1Port, uint16_t dir1Pin);
 void PIDInit(PIDController_t* pid, float kp, float ki, float kd, float min, float max);
 float PIDCompute(PIDController_t* pid, float deltaTimeSeconds);
 int16_t CalculateMotorSpeed(Motor_t* motor, uint32_t deltaTime);

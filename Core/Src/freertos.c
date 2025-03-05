@@ -303,8 +303,6 @@ void StartMotorControlTask(void *argument)
           {
             newPwmPercent = -newPwmPercent;
           }
-
-          /* 设置新的PWM值 */
           SetMotorPWMPercentage(&systemState.motors[i], newPwmPercent);
         }
         else
@@ -676,7 +674,8 @@ float PIDCompute(PIDController_t *pid, float deltaTimeSeconds)
  * @param dirPin: 方向控制GPIO引脚
  */
 void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint8_t pwmChannel,
-               GPIO_TypeDef *dirPort, uint16_t dirPin)
+               GPIO_TypeDef *dir0Port, uint16_t dir0Pin, 
+               GPIO_TypeDef *dir1Port, uint16_t dir1Pin)
 {
   /* 初始化基本参数 */
   motor->id = id;
@@ -690,8 +689,13 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint
   motor->lastUpdateTime = 0;
   motor->encoderTimer = encoderTimer;
   motor->pwmChannel = pwmChannel;
-  motor->dirPort = dirPort;
-  motor->dirPin = dirPin;
+  
+  /* 更新方向控制引脚 */
+  motor->dir0Port = dir0Port;
+  motor->dir0Pin = dir0Pin;
+  motor->dir1Port = dir1Port;
+  motor->dir1Pin = dir1Pin;
+  
   motor->errorCounter = 0;
 
   /* 清除错误标志 */
@@ -705,14 +709,21 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint
 
   /* 设置方向引脚为输出 */
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  GPIO_InitStruct.Pin = dirPin;
+  
+  /* 配置方向0引脚 */
+  GPIO_InitStruct.Pin = dir0Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(dirPort, &GPIO_InitStruct);
+  HAL_GPIO_Init(dir0Port, &GPIO_InitStruct);
+  
+  /* 配置方向1引脚 */
+  GPIO_InitStruct.Pin = dir1Pin;
+  HAL_GPIO_Init(dir1Port, &GPIO_InitStruct);
 
-  /* 初始方向设为正向 */
-  HAL_GPIO_WritePin(dirPort, dirPin, GPIO_PIN_RESET); /* 根据您的硬件可能需要调整 */
+  /* 初始状态：两个方向引脚都设为低，电机停止 */
+  HAL_GPIO_WritePin(dir0Port, dir0Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(dir1Port, dir1Pin, GPIO_PIN_RESET);
 }
 
 /**
@@ -777,51 +788,53 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
   if (pwmPercent < -100)
     pwmPercent = -100;
 
-  /* 设置方向 */
-  if (pwmPercent >= 0)
-  {
+  /* 设置方向和PWM */
+  if (pwmPercent > 0) {
+    /* 正向: DIR0=高, DIR1=低 */
     motor->direction = MOTOR_DIR_FORWARD;
-    HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_RESET); /* 正向 */
-    motor->state = (pwmPercent > 0) ? MOTOR_FORWARD : MOTOR_STOP;
+    HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_RESET);
+    motor->state = MOTOR_FORWARD;
 
     /* 设置PWM百分比 */
     motor->pwmPercent = abs(pwmPercent);
-
-    /* 计算PWM值(0-4095) */
-    uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
-
-    /* 通过I2C设置PWM */
-    if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
-    {
-      SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
-      osMutexRelease(i2cMutexHandle);
-    }
   }
-  else
-  {
+  else if (pwmPercent < 0) {
+    /* 反向: DIR0=低, DIR1=高 */
     motor->direction = MOTOR_DIR_BACKWARD;
-    HAL_GPIO_WritePin(motor->dirPort, motor->dirPin, GPIO_PIN_SET); /* 反向 */
+    HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_SET);
     motor->state = MOTOR_BACKWARD;
 
-    /* 设置PWM百分比 */
+    /* 设置PWM百分比 (取绝对值) */
     motor->pwmPercent = abs(pwmPercent);
+  }
+  else {
+    /* 停止: 两个方向引脚都置低 */
+    motor->direction = MOTOR_DIR_FORWARD; // 默认方向
+    HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_RESET);
+    motor->state = MOTOR_STOP;
 
-    /* 计算PWM值(0-4095) - 修正计算 */
-    uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
+    /* PWM百分比设为0 */
+    motor->pwmPercent = 0;
+  }
 
-    /* 通过I2C设置PWM */
-    if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
-    {
-      SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
-      osMutexRelease(i2cMutexHandle);
-    }
+  /* 计算PWM值(0-4095) */
+  uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
+
+  /* 通过I2C设置PWM - 仅控制使能端输出，与方向无关 */
+  if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
+  {
+    SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
+    osMutexRelease(i2cMutexHandle);
   }
 }
 
 void SetMotorSpeed(Motor_t *motor, int16_t speed)
 {
   /* 设置目标速度(用于PID控制) */
-  motor->targetSpeed = abs(speed);
+  motor->targetSpeed = speed;
   motor->pidController.targetValue = (float)abs(speed);
 
   /* 设置方向标志 */
@@ -862,14 +875,17 @@ void MotorSystemInit(void)
     osMutexRelease(i2cMutexHandle);
   }
 
-  /* 初始化四个电机 - 使用简化接口 */
-  /* 注意：这里的GPIO端口和引脚需要根据实际硬件连接进行调整 */
-  MotorInit(&systemState.motors[0], 0, &htim2, 0, GPIOC, GPIO_PIN_0);
-  MotorInit(&systemState.motors[1], 1, &htim3, 1, GPIOC, GPIO_PIN_1);
-  MotorInit(&systemState.motors[2], 2, &htim4, 2, GPIOC, GPIO_PIN_2);
-  MotorInit(&systemState.motors[3], 3, &htim5, 3, GPIOC, GPIO_PIN_3);
+  /* 初始化四个电机 - 使用两个方向引脚 */
+  MotorInit(&systemState.motors[0], 0, &htim2, 0, 
+            GPIOC, MOTOR1_DIR0_Pin, GPIOF, MOTOR1_DIR1_Pin);
+  MotorInit(&systemState.motors[1], 1, &htim3, 1, 
+            GPIOC, MOTOR2_DIR0_Pin, GPIOF, MOTOR2_DIR1_Pin);
+  MotorInit(&systemState.motors[2], 2, &htim4, 2, 
+            GPIOC, MOTOR3_DIR0_Pin, GPIOF, MOTOR3_DIR1_Pin);
+  MotorInit(&systemState.motors[3], 3, &htim5, 3, 
+            GPIOC, MOTOR4_DIR0_Pin, GPIOF, MOTOR4_DIR1_Pin);
 
-  /* 初始化八个舵机 - 简化接口 */
+  /* 初始化八个舵机 - 保持不变 */
   ServoInit(&systemState.servos[0], 0, 4);  /* 通道4 */
   ServoInit(&systemState.servos[1], 1, 5);  /* 通道5 */
   ServoInit(&systemState.servos[2], 2, 6);  /* 通道6 */
@@ -914,4 +930,3 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
 
 /* USER CODE END Application */
-
