@@ -352,17 +352,22 @@ void StartServoControlTask(void *argument)
   uint16_t command;
   uint8_t servoId, angle;
 
-  /* 设置第一个舵机角度为90度 */
-  /* 对于90度位置，PCA9685将产生7.5%占空比PWM信号，约307计数值 */
-  /* 但根据我们的SERVO_MIN_PULSE和SERVO_MAX_PULSE设置，实际值约为375 */
+  /* 设置所有舵机的角度为90度 */
   if (osMutexAcquire(servoDataMutexHandle, 100) == osOK)
   {
-    SetServoAngle(&systemState.servos[0], 90);
+    /* 初始化所有舵机为90度 */
+    for (uint8_t i = 0; i < 8; i++)
+    {
+      SetServoAngle(&systemState.servos[i], 90);
+      
+      /* 短暂延时，避免I2C总线负载过重 */
+      osDelay(10);
+    }
     osMutexRelease(servoDataMutexHandle);
 
     /* 输出调试信息 */
     snprintf(uartTxBuffer, sizeof(uartTxBuffer),
-             "Servo1 set to 90 degrees, PWM pulse width: ~1.5ms (7.5%% duty cycle)\r\n");
+             "All servos initialized to 90 degrees\r\n");
     HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
   }
 
@@ -520,6 +525,7 @@ void StartCommunicationTask(void *argument)
                 {
                   float kd = atof(token);
                   
+
                   /* 更新PID参数 */
                   if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
                   {
@@ -781,7 +787,7 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
 
   /* 计算速度(转/分) */
   /* 公式: speed = (脉冲数 / 每转脉冲数) * (60秒/分 / 时间秒) */
-  int16_t speed = (int16_t)((float)encoderDelta * 60.0f * 1000.0f /
+  int16_t speed = (int16_t)((float)encoderDelta * 60.0f * 1000.0f / 
                             ((float)ENCODER_COUNTS_PER_REV * (float)deltaTime));
 
   /* 更新电机速度 */
