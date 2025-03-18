@@ -544,6 +544,41 @@ void StartCommunicationTask(void *argument)
             }
           }
         }
+
+        /* 处理舵机角度设置命令 */
+        else if (rxBuffer[0] == '$' && rxBuffer[1] == 'S' && rxBuffer[2] == 'R' && 
+                 rxBuffer[3] == 'V' && rxBuffer[4] == ',')
+        {
+          /* 输出接收到的命令用于调试 */
+          int len = sprintf(uartTxBuffer, "Received: %s#\r\n", rxBuffer);
+          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+          
+          /* 解析舵机命令参数: $SRV,servoId,angle */
+          char *token = strtok((char *)&rxBuffer[5], ",");
+          
+          if (token != NULL)
+          {
+            int servoId = atoi(token);
+            token = strtok(NULL, ",");
+            
+            if (token != NULL && servoId >= 0 && servoId < 8)
+            {
+              float angle = atof(token);
+              
+              /* 角度限制在0-180范围内 */
+              if (angle < 0) angle = 0;
+              if (angle > 180) angle = 180;
+              
+              /* 将命令放入队列 */
+              uint16_t servoCommand = ((uint16_t)servoId << 8) | ((uint16_t)angle & 0xFF);
+              osMessageQueuePut(commandQueueHandle, &servoCommand, 0, 0);
+              
+              /* 确认命令接收 */
+              len = sprintf(uartTxBuffer, "SRV,S%d,%.1f\r\n", servoId, angle);
+              HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+            }
+          }
+        }
       }
       
       /* 命令处理完成，清除缓冲区并重启接收 */
