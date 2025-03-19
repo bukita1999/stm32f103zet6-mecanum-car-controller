@@ -352,13 +352,13 @@ void StartServoControlTask(void *argument)
   uint16_t command;
   uint8_t servoId, angle;
 
-  /* 设置所有舵机的角度为90度 */
+  /* 设置所有舵机的角度为默认角度 */
   if (osMutexAcquire(servoDataMutexHandle, 100) == osOK)
   {
-    /* 初始化所有舵机为90度 */
+    /* 初始化所有舵机为默认角度 */
     for (uint8_t i = 0; i < 8; i++)
     {
-      SetServoAngle(&systemState.servos[i], 90);
+      SetServoAngle(&systemState.servos[i], SERVO_DEFAULT_ANGLE);
       
       /* 短暂延时，避免I2C总线负载过重 */
       osDelay(10);

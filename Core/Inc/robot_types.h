@@ -14,10 +14,10 @@ extern "C" {
 /* 舵机参数 */
 #define SERVO_MIN_PULSE         150     /* 最小脉冲宽度(对应0度) */
 #define SERVO_MAX_PULSE         600     /* 最大脉冲宽度(对应180度) */
-#define SERVO_DEFAULT_ANGLE     90      /* 默认角度 */
+#define SERVO_DEFAULT_ANGLE     70      /* 默认角度 */
 
 /* 电机PID控制参数 */
-#define MOTOR_PID_KP     4    /* 初始比例系数 */
+#define MOTOR_PID_KP     2    /* 初始比例系数 */
 #define MOTOR_PID_KI     1    /* 初始积分系数 */
 #define MOTOR_PID_KD     0   /* 初始微分系数 */
 #define MOTOR_PID_MIN    -100.0f /* PID输出下限 */
