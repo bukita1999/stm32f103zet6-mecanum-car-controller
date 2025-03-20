@@ -948,7 +948,7 @@ void MotorSystemInit(void)
             GPIOC, MOTOR2_DIR0_Pin, GPIOF, MOTOR2_DIR1_Pin);
   MotorInit(&systemState.motors[2], 2, &htim4, 2, 
             GPIOC, MOTOR3_DIR0_Pin, GPIOF, MOTOR3_DIR1_Pin);
-  MotorInit(&systemState.motors[3], 3, &htim1, 3, 
+  MotorInit(&systemState.motors[3], 3, &htim5, 3, 
             GPIOC, MOTOR4_DIR0_Pin, GPIOF, MOTOR4_DIR1_Pin);
 
   /* 初始化八个舵机 - 保持不变 */
@@ -965,7 +965,7 @@ void MotorSystemInit(void)
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
-  HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
+  HAL_TIM_Encoder_Start(&htim5, TIM_CHANNEL_ALL);
 
   /* 设置系统初始化标志 */
   systemState.systemFlags.initialized = 1;
