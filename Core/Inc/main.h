@@ -40,7 +40,7 @@ extern "C" {
 /* 编码器参数定义 */
 #define ENCODER_BASE_PPR       11      /* 编码器基函数冲数 */
 #define ENCODER_POLE_PAIRS     11      /* 磁环极对数 */
-#define MOTOR_GEAR_RATIO       34      /* 电机减速比（示例值，请替换为实际值） */
+#define MOTOR_GEAR_RATIO       131      /* 电机减速比（示例值，请替换为实际值） */
 #define ENCODER_COUNTS_PER_REV (ENCODER_BASE_PPR * ENCODER_POLE_PAIRS * 4 * MOTOR_GEAR_RATIO) /* 每转总脉冲数(含象限倍频) */
 
 /* 系统相关定义 */
