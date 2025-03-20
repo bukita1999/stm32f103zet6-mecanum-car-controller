@@ -303,6 +303,12 @@ void StartMotorControlTask(void *argument)
           {
             newPwmPercent = -newPwmPercent;
           }
+
+          // ===== 在这里插入变化率限制逻辑 =====
+          static const int16_t MAX_PWM_CHANGE = 5; // 每周期最大PWM变化量
+          newPwmPercent = LimitRateOfChange(systemState.motors[i].pwmPercent, newPwmPercent, MAX_PWM_CHANGE);
+          // ===== 变化率限制逻辑结束 =====
+
           SetMotorPWMPercentage(&systemState.motors[i], newPwmPercent);
         }
         else
@@ -534,7 +540,7 @@ void StartCommunicationTask(void *argument)
                     systemState.motors[motorId].pidController.Kd = kd;
                     osMutexRelease(motorDataMutexHandle);
                     
-                    /* 确认命令接收 */
+                    /* 确认消息 */
                     len = sprintf(uartTxBuffer, "PID,M%d,%.2f,%.2f,%.2f\r\n",
                                         motorId, kp, ki, kd);
                     HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
@@ -573,7 +579,7 @@ void StartCommunicationTask(void *argument)
               uint16_t servoCommand = ((uint16_t)servoId << 8) | ((uint16_t)angle & 0xFF);
               osMessageQueuePut(commandQueueHandle, &servoCommand, 0, 0);
               
-              /* 确认命令接收 */
+              /* 确认消息 */
               len = sprintf(uartTxBuffer, "SRV,S%d,%.1f\r\n", servoId, angle);
               HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
             }
@@ -599,6 +605,26 @@ void StartCommunicationTask(void *argument)
  * @retval None
  */
 /* USER CODE END Header_StartMonitorTask */
+
+/**
+ * @brief 限制值变化率
+ * @param current: 当前值
+ * @param target: 目标值
+ * @param maxChange: 允许的最大变化量
+ * @return int16_t: 限制变化率后的值
+ */
+int16_t LimitRateOfChange(int16_t current, int16_t target, int16_t maxChange)
+{
+  int16_t delta = target - current;
+  
+  if (delta > maxChange)
+    return current + maxChange;
+  else if (delta < -maxChange)
+    return current - maxChange;
+  else
+    return target;
+}
+
 void StartMonitorTask(void *argument)
 {
   /* USER CODE BEGIN StartMonitorTask */
@@ -699,8 +725,25 @@ float PIDCompute(PIDController_t *pid, float deltaTimeSeconds)
   /* 计算误差 */
   pid->error = pid->targetValue - pid->currentValue;
 
-  /* 计算积分项(考虑时间) */
-  pid->errorSum += pid->error * deltaTimeSeconds;
+  // ===== 在这里插入积分分离逻辑 =====
+  /* 积分分离 - 大误差时减少积分作用 */
+  float integralGain = 1.0f;
+  const float ERROR_THRESHOLD = 20.0f; // 误差阈值，需根据实际调整
+  
+  if (fabs(pid->error) > ERROR_THRESHOLD) {
+    // 误差大时减小积分作用
+    integralGain = ERROR_THRESHOLD / fabs(pid->error);
+  }
+  
+  /* 当误差符号变化时减小积分项 */
+  if ((pid->error * pid->lastError) < 0) {
+    // 误差方向变化，减小积分项
+    pid->errorSum *= 0.5f;
+  }
+  
+  /* 计算积分项(考虑时间和积分分离) */
+  pid->errorSum += pid->error * deltaTimeSeconds * integralGain;
+  // ===== 积分分离逻辑结束 =====
 
   /* 防止积分饱和 */
   if (pid->errorSum > pid->outputMax)
@@ -854,6 +897,20 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
   if (pwmPercent < -100)
     pwmPercent = -100;
 
+  /* ===== 在这里插入方向切换滞后逻辑 ===== */
+  const int16_t DIRECTION_THRESHOLD = 15; // 方向切换滞后阈值，可根据需要调整
+  
+  // 检测是否需要改变方向
+  if ((pwmPercent > 0 && motor->direction == MOTOR_DIR_BACKWARD) ||
+      (pwmPercent < 0 && motor->direction == MOTOR_DIR_FORWARD)) {
+      
+    // 如果PWM绝对值小于阈值，则避免方向切换
+    if (abs(pwmPercent) < DIRECTION_THRESHOLD) {
+      pwmPercent = 0; // 设为零，避免方向切换
+    }
+  }
+  /* ===== 方向切换滞后逻辑结束 ===== */
+
   /* 设置方向和PWM */
   if (pwmPercent > 0) {
     /* 正向: DIR0=高, DIR1=低 */
@@ -865,135 +922,4 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
     /* 设置PWM百分比 */
     motor->pwmPercent = abs(pwmPercent);
   }
-  else if (pwmPercent < 0) {
-    /* 反向: DIR0=低, DIR1=高 */
-    motor->direction = MOTOR_DIR_BACKWARD;
-    HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_SET);
-    motor->state = MOTOR_BACKWARD;
-
-    /* 设置PWM百分比 (取绝对值) */
-    motor->pwmPercent = abs(pwmPercent);
-  }
-  else {
-    /* 停止: 两个方向引脚都置低 */
-    motor->direction = MOTOR_DIR_FORWARD; // 默认方向
-    HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_RESET);
-    motor->state = MOTOR_STOP;
-
-    /* PWM百分比设为0 */
-    motor->pwmPercent = 0;
-  }
-
-  /* 计算PWM值(0-4095) */
-  uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
-
-  /* 通过I2C设置PWM - 仅控制使能端输出，与方向无关 */
-  if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
-  {
-    SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
-    osMutexRelease(i2cMutexHandle);
-  }
-}
-
-void SetMotorSpeed(Motor_t *motor, int16_t speed)
-{
-  /* 设置目标速度(用于PID控制) */
-  motor->targetSpeed = speed;
-  motor->pidController.targetValue = (float)abs(speed);
-
-  /* 设置方向标志 */
-  motor->direction = (speed >= 0) ? MOTOR_DIR_FORWARD : MOTOR_DIR_BACKWARD;
-
-  /* 更新电机状态 */
-  if (speed > 0)
-    motor->state = MOTOR_FORWARD;
-  else if (speed < 0)
-    motor->state = MOTOR_BACKWARD;
   else
-    motor->state = MOTOR_STOP;
-
-  /* 添加初始PWM设置 */
-  int16_t initialPwm = speed / 2; // 一个简单的估算，可以根据实际情况调整
-  if (initialPwm > 100) initialPwm = 100;
-  if (initialPwm < -100) initialPwm = -100;
-  
-  /* 设置初始PWM */
-  SetMotorPWMPercentage(motor, initialPwm);
-}
-
-/**
- * @brief 系统初始化
- */
-void MotorSystemInit(void)
-{
-  /* 初始化系统状态 */
-  memset(&systemState, 0, sizeof(SystemState_t));
-
-  /* 初始化PCA9685 */
-  if (osMutexAcquire(i2cMutexHandle, 100) == osOK)
-  {
-    if (PCA9685_Init(&hi2c1) != HAL_OK)
-    {
-      systemState.systemFlags.pca9685Error = 1;
-    }
-    osMutexRelease(i2cMutexHandle);
-  }
-
-  /* 初始化四个电机 - 使用两个方向引脚 */
-  MotorInit(&systemState.motors[0], 0, &htim2, 0, 
-            GPIOC, MOTOR1_DIR0_Pin, GPIOF, MOTOR1_DIR1_Pin);
-  MotorInit(&systemState.motors[1], 1, &htim3, 1, 
-            GPIOC, MOTOR2_DIR0_Pin, GPIOF, MOTOR2_DIR1_Pin);
-  MotorInit(&systemState.motors[2], 2, &htim4, 2, 
-            GPIOC, MOTOR3_DIR0_Pin, GPIOF, MOTOR3_DIR1_Pin);
-  MotorInit(&systemState.motors[3], 3, &htim5, 3, 
-            GPIOC, MOTOR4_DIR0_Pin, GPIOF, MOTOR4_DIR1_Pin);
-
-  /* 初始化八个舵机 - 保持不变 */
-  ServoInit(&systemState.servos[0], 0, 4);  /* 通道4 */
-  ServoInit(&systemState.servos[1], 1, 5);  /* 通道5 */
-  ServoInit(&systemState.servos[2], 2, 6);  /* 通道6 */
-  ServoInit(&systemState.servos[3], 3, 7);  /* 通道7 */
-  ServoInit(&systemState.servos[4], 4, 8);  /* 通道8 */
-  ServoInit(&systemState.servos[5], 5, 9);  /* 通道9 */
-  ServoInit(&systemState.servos[6], 6, 10); /* 通道10 */
-  ServoInit(&systemState.servos[7], 7, 11); /* 通道11 */
-
-  /* 启动编码器计数 */
-  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
-  HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
-  HAL_TIM_Encoder_Start(&htim5, TIM_CHANNEL_ALL);
-
-  /* 设置系统初始化标志 */
-  systemState.systemFlags.initialized = 1;
-}
-
-/**
-  * @brief UART接收完成回调
-  */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-  if (huart->Instance == USART1)
-  {
-    /* 更新索引 */
-    rxIndex++;
-    
-    /* 检查是否收到结束符'#'或缓冲区将满 */
-    if (rxBuffer[rxIndex-1] == '#' || rxIndex >= sizeof(rxBuffer) - 2)
-    {
-      /* 设置事件标志，通知任务处理命令 */
-      osEventFlagsSet(systemEventGroupHandle, EVENT_COMMUNICATION);
-    }
-    else
-    {
-      /* 继续接收下一个字符 */
-      HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
-    }
-  }
-}
-
-/* USER CODE END Application */
-
