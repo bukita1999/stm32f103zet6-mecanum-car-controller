@@ -80,13 +80,6 @@ const osThreadAttr_t MotorControlTas_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for ServoControlTas */
-osThreadId_t ServoControlTasHandle;
-const osThreadAttr_t ServoControlTas_attributes = {
-  .name = "ServoControlTas",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
-};
 /* Definitions for CommunicationTa */
 osThreadId_t CommunicationTaHandle;
 const osThreadAttr_t CommunicationTa_attributes = {
@@ -139,7 +132,6 @@ const osEventFlagsAttr_t systemEventGroup_attributes = {
 
 void StartDefaultTask(void *argument);
 void StartMotorControlTask(void *argument);
-void StartServoControlTask(void *argument);
 void StartCommunicationTask(void *argument);
 void StartMonitorTask(void *argument);
 
@@ -194,9 +186,6 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of MotorControlTas */
   MotorControlTasHandle = osThreadNew(StartMotorControlTask, NULL, &MotorControlTas_attributes);
-
-  /* creation of ServoControlTas */
-  ServoControlTasHandle = osThreadNew(StartServoControlTask, NULL, &ServoControlTas_attributes);
 
   /* creation of CommunicationTa */
   CommunicationTaHandle = osThreadNew(StartCommunicationTask, NULL, &CommunicationTa_attributes);
@@ -317,74 +306,6 @@ void StartMotorControlTask(void *argument)
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(period_ms));
   }
   /* USER CODE END StartMotorControlTask */
-}
-
-/* USER CODE BEGIN Header_StartServoControlTask */
-/**
- * @brief 舵机控制任务函数
- * @param argument: 未使用
- * @retval None
- */
-/* USER CODE END Header_StartServoControlTask */
-void StartServoControlTask(void *argument)
-{
-  /* USER CODE BEGIN StartServoControlTask */
-  /* 等待系统初始化完成 */
-  osDelay(200);
-
-  /* 舵机控制周期 */
-  const uint32_t SERVO_CONTROL_PERIOD = 20; /* 20ms */
-  uint16_t command;
-  uint8_t servoId, angle;
-
-  /* 设置所有舵机的角度为默认角度 */
-  if (osMutexAcquire(servoDataMutexHandle, 100) == osOK)
-  {
-    /* 初始化所有舵机为默认角度 */
-    for (uint8_t i = 0; i < 8; i++)
-    {
-      SetServoAngle(&systemState.servos[i], SERVO_DEFAULT_ANGLE);
-      
-      /* 短暂延时，避免I2C总线负载过重 */
-      osDelay(10);
-    }
-    osMutexRelease(servoDataMutexHandle);
-
-    /* 输出调试信息 */
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer),
-             "All servos initialized to %d degrees\r\n", SERVO_DEFAULT_ANGLE);
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-  }
-
-  /* 无限循环 */
-  for (;;)
-  {
-    /* 接收命令并执行舵机控制 - 实际应用中这里会处理接收到的命令 */
-    if (osMessageQueueGet(commandQueueHandle, &command, NULL, 0) == osOK)
-    {
-      /* 解析命令 - 示例格式：高8位为舵机ID，低8位为角度值 */
-      servoId = (command >> 8) & 0xFF;
-      angle = command & 0xFF;
-
-      if (servoId < 8)
-      {
-        /* 使用简化接口设置舵机角度，确保线程安全 */
-        if (osMutexAcquire(servoDataMutexHandle, 10) == osOK)
-        {
-          SetServoAngle(&systemState.servos[servoId], (float)angle);
-          osMutexRelease(servoDataMutexHandle);
-        }
-        else
-        {
-          systemState.systemFlags.servoError = 1;
-        }
-      }
-    }
-
-    /* 等待下一个周期 */
-    osDelay(SERVO_CONTROL_PERIOD);
-  }
-  /* USER CODE END StartServoControlTask */
 }
 
 /* USER CODE BEGIN Header_StartCommunicationTask */
@@ -530,40 +451,6 @@ void StartCommunicationTask(void *argument)
           }
         }
 
-        /* 处理舵机角度设置命令 */
-        else if (rxBuffer[0] == '$' && rxBuffer[1] == 'S' && rxBuffer[2] == 'R' && 
-                 rxBuffer[3] == 'V' && rxBuffer[4] == ',')
-        {
-          /* 输出接收到的命令用于调试 */
-          int len = sprintf(uartTxBuffer, "Received: %s#\r\n", rxBuffer);
-          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
-          
-          /* 解析舵机命令参数: $SRV,servoId,angle */
-          char *token = strtok((char *)&rxBuffer[5], ",");
-          
-          if (token != NULL)
-          {
-            int servoId = atoi(token);
-            token = strtok(NULL, ",");
-            
-            if (token != NULL && servoId >= 0 && servoId < 8)
-            {
-              float angle = atof(token);
-              
-              /* 角度限制在0-180范围内 */
-              if (angle < 0) angle = 0;
-              if (angle > 180) angle = 180;
-              
-              /* 将命令放入队列 */
-              uint16_t servoCommand = ((uint16_t)servoId << 8) | ((uint16_t)angle & 0xFF);
-              osMessageQueuePut(commandQueueHandle, &servoCommand, 0, 0);
-              
-              /* 确认命令接收 */
-              len = sprintf(uartTxBuffer, "SRV,S%d,%.1f\r\n", servoId, angle);
-              HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
-            }
-          }
-        }
       }
       
       /* 命令处理完成，清除缓冲区并重启接收 */
@@ -911,15 +798,6 @@ void MotorSystemInit(void)
   MotorInit(&systemState.motors[3], 3, &htim5, 3, 
             GPIOC, MOTOR4_DIR0_Pin, GPIOF, MOTOR4_DIR1_Pin);
 
-  /* 初始化八个舵机 - 保持不变 */
-  ServoInit(&systemState.servos[0], 0, 4);  /* 通道4 */
-  ServoInit(&systemState.servos[1], 1, 5);  /* 通道5 */
-  ServoInit(&systemState.servos[2], 2, 6);  /* 通道6 */
-  ServoInit(&systemState.servos[3], 3, 7);  /* 通道7 */
-  ServoInit(&systemState.servos[4], 4, 8);  /* 通道8 */
-  ServoInit(&systemState.servos[5], 5, 9);  /* 通道9 */
-  ServoInit(&systemState.servos[6], 6, 10); /* 通道10 */
-  ServoInit(&systemState.servos[7], 7, 11); /* 通道11 */
 
   /* 启动编码器计数 */
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);

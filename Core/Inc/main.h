@@ -49,9 +49,8 @@ extern "C" {
 
 /* 事件标志定义 */
 #define EVENT_MOTOR_UPDATE     (1 << 0) /* 电机数据更新事件 */
-#define EVENT_SERVO_UPDATE     (1 << 1) /* 舵机数据更新事件 */
-#define EVENT_ERROR            (1 << 2) /* 错误事件 */
-#define EVENT_COMMUNICATION    (1 << 3) /* 通信事件 */
+#define EVENT_ERROR            (1 << 1) /* 错误事件 */
+#define EVENT_COMMUNICATION    (1 << 2) /* 通信事件 */
 
 /* 全局变量声明 */
 extern SystemState_t systemState;

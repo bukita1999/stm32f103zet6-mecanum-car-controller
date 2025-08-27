@@ -27,7 +27,6 @@ extern "C" {
 #define PCA9685_ALL_LED_OFF_L   0xFC    /* 所有LED OFF 低字节 */
 #define PCA9685_ALL_LED_OFF_H   0xFD    /* 所有LED OFF 高字节 */
 
-#define PCA9685_SERVO_FREQ      50      /* 舵机频率(Hz) */
 
 
 
@@ -38,9 +37,6 @@ HAL_StatusTypeDef PCA9685_Init(I2C_HandleTypeDef *hi2c);
 HAL_StatusTypeDef PCA9685_SetPWMFreq(I2C_HandleTypeDef *hi2c, float freq);
 HAL_StatusTypeDef PCA9685_SetPWM(I2C_HandleTypeDef *hi2c, uint8_t channel, uint16_t on, uint16_t off);
 HAL_StatusTypeDef PCA9685_SetPin(I2C_HandleTypeDef *hi2c, uint8_t channel, uint16_t value);
-
-void ServoInit(Servo_t* servo, uint8_t id, uint8_t channel);
-void SetServoAngle(Servo_t* servo, float angle);
 
 /* 电机PWM控制函数 */
 void SetMotorPWM(I2C_HandleTypeDef *hi2c, uint8_t channel, uint16_t value);

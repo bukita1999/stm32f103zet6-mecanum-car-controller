@@ -56,8 +56,8 @@ HAL_StatusTypeDef PCA9685_Init(I2C_HandleTypeDef *hi2c) {
     status = PCA9685_WriteRegister(hi2c, PCA9685_MODE1, 0x20);
     if (status != HAL_OK) return status;
     
-    /* 设置默认PWM频率为50Hz(舵机标准频率) */
-    status = PCA9685_SetPWMFreq(hi2c, PCA9685_SERVO_FREQ);
+    /* 设置默认PWM频率为50Hz(标准频率) */
+    status = PCA9685_SetPWMFreq(hi2c, 50.0f);
     
     return status;
 }
@@ -157,45 +157,4 @@ HAL_StatusTypeDef PCA9685_SetPin(I2C_HandleTypeDef *hi2c, uint8_t channel, uint1
  */
 void SetMotorPWM(I2C_HandleTypeDef *hi2c, uint8_t channel, uint16_t value) {
     PCA9685_SetPin(hi2c, channel, value);
-}
-
-/**
- * @brief 初始化舵机
- * @param servo: 舵机结构体指针
- * @param id: 舵机ID
- * @param channel: PCA9685通道
- */
-void ServoInit(Servo_t* servo, uint8_t id, uint8_t channel) {
-    servo->id = id;
-    servo->channel = channel;
-    servo->targetAngle = SERVO_DEFAULT_ANGLE;
-    servo->currentAngle = SERVO_DEFAULT_ANGLE;
-}
-
-/**
- * @brief 设置舵机角度(简化接口)
- * @param servo: 舵机结构体指针
- * @param angle: 目标角度(0-180)
- */
-void SetServoAngle(Servo_t* servo, float angle) {
-    extern osMutexId_t i2cMutexHandle;
-    extern I2C_HandleTypeDef hi2c1;
-    
-    /* 角度范围限制 */
-    if (angle < 0) angle = 0;
-    if (angle > 180) angle = 180;
-    
-    /* 更新目标角度和当前角度 */
-    servo->targetAngle = angle;
-    servo->currentAngle = angle;
-    
-    /* 角度到脉冲宽度的线性映射 */
-    uint16_t pulseWidth = (uint16_t)(SERVO_MIN_PULSE + 
-        (angle / 180.0f) * (SERVO_MAX_PULSE - SERVO_MIN_PULSE));
-    
-    /* 通过I2C设置PWM */
-    if (osMutexAcquire(i2cMutexHandle, 10) == osOK) {
-        PCA9685_SetPin(&hi2c1, servo->channel, pulseWidth);
-        osMutexRelease(i2cMutexHandle);
-    }
 }

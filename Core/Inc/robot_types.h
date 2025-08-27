@@ -11,10 +11,6 @@ extern "C" {
 #include "stm32f1xx_hal.h"
 #include "cmsis_os.h"
 
-/* 舵机参数 */
-#define SERVO_MIN_PULSE         150     /* 最小脉冲宽度(对应0度) */
-#define SERVO_MAX_PULSE         600     /* 最大脉冲宽度(对应180度) */
-#define SERVO_DEFAULT_ANGLE     70      /* 默认角度 */
 
 /* 电机PID控制参数 */
 #define MOTOR_PID_KP     2    /* 初始比例系数 */
@@ -27,13 +23,6 @@ extern "C" {
 #define MOTOR_MAX_RPM    10      /* 最大RPM值 */
 #define MOTOR_TARGET_RPM 8       /* 默认目标RPM值 */
 
-/* 舵机结构体定义 */
-typedef struct {
-    uint8_t id;                /* 舵机ID (0-7) */
-    uint8_t channel;           /* PCA9685通道 */
-    float targetAngle;         /* 目标角度 (0-180度) */
-    float currentAngle;        /* 当前角度 (0-180度) */
-} Servo_t;
 
 /* PID控制器结构体 */
 typedef struct {
@@ -97,16 +86,14 @@ typedef struct {
 /* 系统状态结构体 */
 typedef struct {
     Motor_t motors[4];         /* 四个电机 */
-    Servo_t servos[8];         /* 八个舵机 */
     struct {
         uint8_t initialized : 1;   /* 系统初始化标志 */
         uint8_t motorError : 1;    /* 电机错误标志 */
-        uint8_t servoError : 1;    /* 舵机错误标志 */
         uint8_t communicationError : 1; /* 通信错误标志 */
         uint8_t lowBattery : 1;    /* 低电量标志 */
         uint8_t emergencyStop : 1; /* 紧急停止标志 */
         uint8_t pca9685Error : 1;  /* PCA9685错误标志 */
-        uint8_t reserved : 1;      /* 保留位 */
+        uint8_t reserved : 2;      /* 保留位 */
     } systemFlags;             /* 系统状态标志 */
 } SystemState_t;
 
