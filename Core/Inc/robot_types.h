@@ -13,15 +13,38 @@ extern "C" {
 
 
 /* 电机PID控制参数 */
-#define MOTOR_PID_KP     2    /* 初始比例系数 */
-#define MOTOR_PID_KI     0.1    /* 初始积分系数 */
-#define MOTOR_PID_KD     0.01   /* 初始微分系数 */
+#define MOTOR_PID_KP     0.029    /* 初始比例系数 */
+#define MOTOR_PID_KI     0.00146    /* 初始积分系数 */
+#define MOTOR_PID_KD     0.000146   /* 初始微分系数 */
 #define MOTOR_PID_MIN    -100.0f /* PID输出下限 */
 #define MOTOR_PID_MAX    100.0f  /* PID输出上限 */
 
 /* 电机RPM参数 */
 #define MOTOR_MAX_RPM    10      /* 最大RPM值 */
 #define MOTOR_TARGET_RPM 8       /* 默认目标RPM值 */
+
+/* === 速度单位与换算建议（新增） === */
+#define SPEED_UNIT_ENC_CPS   1        /* MCU 内部统一使用 CPS */
+#define SPEED_UNIT_STR       "enc_cps"
+
+/* 如果需要把 CPS 打印为 RPM，仅用于调试（不用于控制），请设定每转 ticks 数 */
+#ifndef ENCODER_TICKS_PER_REV
+/* 这是“定时器实际计数/机械一转”的 ticks 数：
+ * 强烈建议：靠实测（手动转一圈读取计数差）确认，而不是拍脑袋。
+ */
+#define ENCODER_TICKS_PER_REV 4096
+#endif
+
+static inline int32_t enc_delta_to_cps(int32_t delta, uint32_t dt_ms){
+  /* delta: 采样周期内的计数增量（带符号） */
+  return (int32_t)((1000LL * delta) / (int32_t)dt_ms);
+}
+static inline float cps_to_rpm(int32_t cps){
+  return (float)cps * 60.0f / (float)ENCODER_TICKS_PER_REV;
+}
+static inline int32_t rpm_to_cps(float rpm){
+  return (int32_t)(rpm * (float)ENCODER_TICKS_PER_REV / 60.0f);
+}
 
 
 /* PID控制器结构体 */

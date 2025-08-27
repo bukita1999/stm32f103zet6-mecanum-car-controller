@@ -79,16 +79,22 @@ void USB_SendRawTlvFrame(const uint8_t *raw, uint16_t raw_len){
 // === 打包并发送四电机 Telemetry ===
 void USB_SendTelemetry(void){
   Telemetry_t t; uint8_t raw[128], *p = raw;
+
+  /* === 新增：单位声明 TLV === */
+  UsbSpeedUnit_t unit = { .code = SPEED_UNIT_CODE_ENC_CPS };
+  memcpy(unit.name, SPEED_UNIT_STR, sizeof("enc_cps"));  // 包含终止符也没问题
+  p = tlv_put(p, TLV_SPEED_UNIT, &unit, sizeof(unit));
+
   if (osMutexAcquire(motorDataMutexHandle, 10) == osOK){
     for (int i=0;i<4;i++){
-      t.m[i].tgt = systemState.motors[i].targetSpeed;
-      t.m[i].spd = systemState.motors[i].currentSpeed;
+      t.m[i].tgt = systemState.motors[i].targetSpeed;  // CPS
+      t.m[i].spd = systemState.motors[i].currentSpeed; // CPS
       t.m[i].pwm = systemState.motors[i].pwmPercent;
       t.m[i].err = systemState.motors[i].pidController.error;
     }
     osMutexRelease(motorDataMutexHandle);
   }else{ memset(&t, 0, sizeof(t)); }
-  p = tlv_put(p, 0x10, &t, sizeof(t));    // Type 0x10: Telemetry
+  p = tlv_put(p, TLV_TELEMETRY, &t, sizeof(t));
   USB_SendRawTlvFrame(raw, (uint16_t)(p - raw));
 }
 

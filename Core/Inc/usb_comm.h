@@ -15,6 +15,15 @@ extern "C" {
 typedef struct __attribute__((packed)) { int16_t tgt, spd; uint16_t pwm; float err; } MotorTelem_t;
 typedef struct __attribute__((packed)) { MotorTelem_t m[4]; } Telemetry_t;
 
+#define TLV_TELEMETRY        0x10
+#define TLV_SPEED_UNIT       0x11  /* payload: {u8 code; char name[8]} */
+#define SPEED_UNIT_CODE_ENC_CPS  1
+
+typedef struct __attribute__((packed)){
+  uint8_t code;      /* 1 = enc_cps */
+  char    name[8];   /* "enc_cps"   */
+} UsbSpeedUnit_t;
+
 // --- TLV 辅助 ---
 uint8_t* tlv_put(uint8_t *p, uint8_t type, const void *data, uint16_t len);
 
