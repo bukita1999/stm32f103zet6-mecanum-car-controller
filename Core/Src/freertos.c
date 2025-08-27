@@ -31,6 +31,8 @@
 #include "pca9685.h"
 #include "i2c.h"
 #include "usart.h"
+#include "stream_buffer.h"
+#include "usb_comm.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +54,11 @@
 /* USER CODE BEGIN Variables */
 /* 声明系统状态全局变量 */
 SystemState_t systemState;
+
+#define USB_RX_STREAM_SIZE   1024
+StreamBufferHandle_t usbRxStreamHandle;
+static uint8_t        usbRxStreamStorage[USB_RX_STREAM_SIZE];
+static StaticStreamBuffer_t usbRxStreamCtrl;
 
 /* 用于UART发送的缓冲区 */
 char uartTxBuffer[128];
@@ -207,6 +214,9 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  usbRxStreamHandle = xStreamBufferCreateStatic(
+      USB_RX_STREAM_SIZE, 1,            // 触发级别=1字节
+      usbRxStreamStorage, &usbRxStreamCtrl);
   /* USER CODE END RTOS_THREADS */
 
   /* creation of systemEventGroup */
@@ -512,7 +522,7 @@ void StartMonitorTask(void *argument)
         {
           snprintf(uartTxBuffer, sizeof(uartTxBuffer),
                   "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%.2f\r\n",
-                  i + 1, 
+                  i + 1,
                   systemState.motors[i].targetSpeed,
                   systemState.motors[i].currentSpeed,
                   systemState.motors[i].pwmPercent,
@@ -537,6 +547,14 @@ void StartMonitorTask(void *argument)
       /* 可以添加其他系统参数监控，如温度、电压等 */
     }
     
+    /* 每100ms发送一次Telemetry */
+    static uint32_t lastTelemetryTime = 0;
+    uint32_t now = osKernelGetTickCount();
+    if (now - lastTelemetryTime >= 100) {
+      lastTelemetryTime = now;
+      USB_SendTelemetry();
+    }
+    
     /* 监控任务周期 */
     osDelay(100);
   }
@@ -553,10 +571,33 @@ void StartMonitorTask(void *argument)
 void StartTask05(void *argument)
 {
   /* USER CODE BEGIN StartTask05 */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
+  uint8_t in[128];                 // 每次从流里拉一批
+  static uint8_t seg[USB_ENC_MAX]; // 暂存一帧的 COBS 片段
+  size_t seg_len = 0;
+
+  for(;;){
+    size_t n = xStreamBufferReceive(usbRxStreamHandle, in, sizeof(in), portMAX_DELAY);
+    for (size_t i=0; i<n; i++){
+      uint8_t b = in[i];
+      if (b == 0x00){
+        // ----- 到达帧尾：解码 + 校验 + 交业务 -----
+        uint8_t raw[USB_FRAME_MAX+4];
+        size_t  raw_len = cobs_decode(raw, sizeof(raw), seg, seg_len);
+        seg_len = 0;                              // 重置片段
+        if (raw_len >= 4){
+          uint32_t crc_got = *(uint32_t*)&raw[raw_len-4];
+          uint32_t crc_cal = crc32_zlib(raw, raw_len-4);
+          if (crc_got == crc_cal){
+            USB_HandleFrame(raw, (uint16_t)(raw_len - 4)); // payload
+          }
+          // CRC 错误直接丢弃，避免污染上层
+        }
+      }else{
+        // 累积片段；过长就丢弃这帧，避免溢出
+        if (seg_len < sizeof(seg)) seg[seg_len++] = b;
+        else seg_len = 0;
+      }
+    }
   }
   /* USER CODE END StartTask05 */
 }
