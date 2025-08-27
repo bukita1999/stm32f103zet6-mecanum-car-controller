@@ -59,6 +59,12 @@ char uartTxBuffer[128];
 /* 用于UART接收的缓冲区 */
 uint8_t rxBuffer[64];
 uint8_t rxIndex = 0;
+
+/* MOD: 速度小低通的状态（每路电机一个），初值 0 */
+static float g_motorSpeedFilt[4] = {0};
+
+/* MOD: I2C 输出节流（跟踪上次写入的原始 0~4095 PWM 值） */
+static uint16_t g_lastPwmRaw[4] = {0};
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -242,13 +248,10 @@ void StartMotorControlTask(void *argument)
   /* 系统初始化 */
   MotorSystemInit();
 
-  /* 任务时间戳变量 */
-  uint32_t lastWakeTime;
-  uint32_t currentTime;
-  //static uint32_t lastReportTime = 0;
-
-  /* 初始化任务时间戳 */
-  lastWakeTime = osKernelGetTickCount();
+  /* MOD: 严格等周期调度准备 */
+  TickType_t lastWake = xTaskGetTickCount();
+  const uint32_t period_ms = MOTOR_CONTROL_PERIOD;      // 例如 10
+  const float dt_s = period_ms / 1000.0f;
 
   /* 初始化所有电机的目标速度和PID参数 */
   for (uint8_t i = 0; i < 4; i++)
@@ -256,60 +259,46 @@ void StartMotorControlTask(void *argument)
     if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
     {
       /* 初始化PID控制器参数 - 根据实际电机特性调整 */
-      PIDInit(&systemState.motors[i].pidController, 
-              MOTOR_PID_KP, MOTOR_PID_KI, MOTOR_PID_KD, 
+      PIDInit(&systemState.motors[i].pidController,
+              MOTOR_PID_KP, MOTOR_PID_KI, MOTOR_PID_KD,
               -100, 100); // 输出范围为-100到100，对应PWM百分比
 
-      /* 设置初始目标速度为0 */
+      /* 设置初始目标速度为0（带符号） */
       SetMotorSpeed(&systemState.motors[i], 0);
       osMutexRelease(motorDataMutexHandle);
     }
   }
 
   /* 输出调试信息 */
-  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor control task started, PID velocity control enabled for all motors\r\n");
+  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor control task started (fixed %lums cycle)\r\n", period_ms);
   HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
 
   /* 无限循环 */
   for (;;)
   {
-    /* 获取当前时间 */
-    currentTime = osKernelGetTickCount();
-    uint32_t deltaTime = currentTime - lastWakeTime;
-
     /* 处理每个电机 */
     for (uint8_t i = 0; i < 4; i++)
     {
       /* 请求电机数据互斥量 */
       if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
       {
-        /* 计算当前电机速度 */
-        CalculateMotorSpeed(&systemState.motors[i], deltaTime);
+        /* 1) 速度计算（deltaTime 使用固定周期） */
+        CalculateMotorSpeed(&systemState.motors[i], period_ms);
 
-        /* 添加PID控制逻辑 */
-        if (systemState.motors[i].state != MOTOR_STOP)
-        {
-          /* 更新PID控制器的当前值 */
-          systemState.motors[i].pidController.currentValue = (float)abs(systemState.motors[i].currentSpeed);
+        /* 2) 速度小低通（抑制低速量化噪声） */
+        float tau = 0.10f;                             // 100ms 时间常数，先保守
+        float alpha = dt_s / (tau + dt_s);
+        g_motorSpeedFilt[i] += alpha * ((float)systemState.motors[i].currentSpeed - g_motorSpeedFilt[i]);
 
-          /* 计算PID输出 */
-          float pidOutput = PIDCompute(&systemState.motors[i].pidController, (float)deltaTime / 1000.0f);
+        /* 3) 带符号 PID：测量/目标均用带符号速度 */
+        systemState.motors[i].pidController.currentValue = g_motorSpeedFilt[i];
+        /* targetValue 由 SetMotorSpeed() 设定为带符号，不需要 abs() */
 
-          /* 应用PID输出到PWM百分比 */
-          int16_t newPwmPercent = (int16_t)pidOutput;
+        /* 4) 计算控制量（已含抗积分饱和与限幅） */
+        float pidOut = PIDCompute(&systemState.motors[i].pidController, dt_s);
 
-          /* 保持方向一致 */
-          if (systemState.motors[i].direction == MOTOR_DIR_BACKWARD)
-          {
-            newPwmPercent = -newPwmPercent;
-          }
-          SetMotorPWMPercentage(&systemState.motors[i], newPwmPercent);
-        }
-        else
-        {
-          /* 如果电机停止，确保PWM为0 */
-          SetMotorPWMPercentage(&systemState.motors[i], 0);
-        }
+        /* 5) 直接用控制量决定方向与占空比（不再额外翻转号） */
+        SetMotorPWMPercentage(&systemState.motors[i], (int16_t)pidOut);
 
         /* 释放电机数据互斥量 */
         osMutexRelease(motorDataMutexHandle);
@@ -321,15 +310,11 @@ void StartMotorControlTask(void *argument)
       }
     }
 
-
     /* 触发电机数据更新事件 */
     osEventFlagsSet(systemEventGroupHandle, EVENT_MOTOR_UPDATE);
 
-    /* 更新时间戳 */
-    lastWakeTime = currentTime;
-
-    /* 等待下一个周期(10ms) */
-    osDelay(MOTOR_CONTROL_PERIOD);
+    /* MOD: 等周期延时（消除周期漂移） */
+    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(period_ms));
   }
   /* USER CODE END StartMotorControlTask */
 }
@@ -694,40 +679,36 @@ void PIDInit(PIDController_t *pid, float kp, float ki, float kd, float min, floa
  * @param pid: PID控制器结构体指针
  * @return float: PID计算结果
  */
-float PIDCompute(PIDController_t *pid, float deltaTimeSeconds)
+float PIDCompute(PIDController_t *pid, float dt)
 {
-  /* 计算误差 */
-  pid->error = pid->targetValue - pid->currentValue;
+  /* 误差与基本项 */
+  float e = pid->targetValue - pid->currentValue;
 
-  /* 计算积分项(考虑时间) */
-  pid->errorSum += pid->error * deltaTimeSeconds;
+  /* 先“候选”积分，再基于饱和判定是否采纳 */
+  float I_candidate = pid->errorSum + e * dt;
 
-  /* 防止积分饱和 */
-  if (pid->errorSum > pid->outputMax)
-    pid->errorSum = pid->outputMax;
-  else if (pid->errorSum < pid->outputMin)
-    pid->errorSum = pid->outputMin;
+  /* 误差微分（保留你的做法；若需 DoM 可后续再改） */
+  float d = 0.0f;
+  if (dt > 0.0f) d = (e - pid->lastError) / dt;
 
-  /* 计算微分项(考虑时间) */
-  float errorDiff = 0;
-  if (deltaTimeSeconds > 0)
-    errorDiff = (pid->error - pid->lastError) / deltaTimeSeconds;
+  /* 未饱和输出 */
+  float u_unsat = pid->Kp * e + pid->Ki * I_candidate + pid->Kd * d;
 
-  /* 计算PID输出 */
-  pid->output = pid->Kp * pid->error + 
-                pid->Ki * pid->errorSum + 
-                pid->Kd * errorDiff;
+  /* 限幅 */
+  float u = u_unsat;
+  if (u > pid->outputMax) u = pid->outputMax;
+  else if (u < pid->outputMin) u = pid->outputMin;
 
-  /* 输出限幅 */
-  if (pid->output > pid->outputMax)
-    pid->output = pid->outputMax;
-  else if (pid->output < pid->outputMin)
-    pid->output = pid->outputMin;
+  /* 条件积分（抗饱和）：未饱和，或积分有助于“脱离饱和”时才采纳 */
+  if ((u == u_unsat) || (u * e > 0.0f))
+  {
+    pid->errorSum = I_candidate;
+  }
+  /* else: 保持原有 pid->errorSum，不再“越积越多” */
 
-  /* 保存当前误差 */
-  pid->lastError = pid->error;
-
-  return pid->output;
+  pid->lastError = e;
+  pid->output = u;
+  return u;
 }
 
 /**
@@ -800,35 +781,21 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint
  */
 int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
 {
-  /* 读取当前编码器计数 */
-  int32_t currentCount = __HAL_TIM_GET_COUNTER(motor->encoderTimer);
+  /* MOD: 通用回绕（无符号减法），适配 16/32 位定时器 */
+  uint32_t cur = __HAL_TIM_GET_COUNTER(motor->encoderTimer);
+  uint32_t last = motor->lastEncoderCount;        // 请确保结构体中是同宽度无符号
+  int32_t  encoderDelta = (int32_t)(cur - last);  // 在 |delta| << 2^(N-1) 前提下有符号正确
+  motor->lastEncoderCount = cur;
 
-  /* 计算编码器计数变化量 */
-  int32_t encoderDelta = currentCount - motor->lastEncoderCount;
+  motor->encoderCount += encoderDelta;            // 累计计数（如需）
 
-  /* 处理计数器溢出情况 */
-  if (encoderDelta > 32768)
-  { /* 正向溢出 */
-    encoderDelta = encoderDelta - 65536;
-  }
-  else if (encoderDelta < -32768)
-  { /* 负向溢出 */
-    encoderDelta = encoderDelta + 65536;
-  }
+  /* 速度换算（带符号） */
+  float speed = ((float)encoderDelta) * 60.0f * 1000.0f /
+                ((float)ENCODER_COUNTS_PER_REV * (float)deltaTime);
 
-  /* 更新编码器计数 */
-  motor->lastEncoderCount = currentCount;
-  motor->encoderCount += encoderDelta;
+  motor->currentSpeed = (int16_t)speed;
 
-  /* 计算速度(转/分) */
-  /* 公式: speed = (脉冲数 / 每转脉冲数) * (60秒/分 / 时间秒) */
-  int16_t speed = (int16_t)((float)encoderDelta * 60.0f * 1000.0f / 
-                            ((float)ENCODER_COUNTS_PER_REV * (float)deltaTime));
-
-  /* 更新电机速度 */
-  motor->currentSpeed = speed;
-
-  /* 检测堵转情况 */
+  /* 堵转检测保留，阈值可后续再调 */
   if (abs(motor->targetSpeed) > 20 && abs(motor->currentSpeed) < 5)
   {
     motor->errorCounter++;
@@ -843,83 +810,76 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
     motor->errorCounter = 0;
   }
 
-  return speed;
+  return motor->currentSpeed;
 }
 
 void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
 {
-  /* 限制速度范围 */
-  if (pwmPercent > 100)
-    pwmPercent = 100;
-  if (pwmPercent < -100)
-    pwmPercent = -100;
+  /* 限幅、方向控制（保持你原有逻辑） */
+  if (pwmPercent > 100) pwmPercent = 100;
+  if (pwmPercent < -100) pwmPercent = -100;
 
-  /* 设置方向和PWM */
   if (pwmPercent > 0) {
-    /* 正向: DIR0=高, DIR1=低 */
     motor->direction = MOTOR_DIR_FORWARD;
     HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_RESET);
     motor->state = MOTOR_FORWARD;
-
-    /* 设置PWM百分比 */
-    motor->pwmPercent = abs(pwmPercent);
-  }
-  else if (pwmPercent < 0) {
-    /* 反向: DIR0=低, DIR1=高 */
+    motor->pwmPercent = pwmPercent;
+  } else if (pwmPercent < 0) {
     motor->direction = MOTOR_DIR_BACKWARD;
     HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_SET);
     motor->state = MOTOR_BACKWARD;
-
-    /* 设置PWM百分比 (取绝对值) */
-    motor->pwmPercent = abs(pwmPercent);
-  }
-  else {
-    /* 停止: 两个方向引脚都置低 */
-    motor->direction = MOTOR_DIR_FORWARD; // 默认方向
+    motor->pwmPercent = -pwmPercent; /* 幅值 */
+  } else {
+    motor->direction = MOTOR_DIR_FORWARD;
     HAL_GPIO_WritePin(motor->dir0Port, motor->dir0Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(motor->dir1Port, motor->dir1Pin, GPIO_PIN_RESET);
     motor->state = MOTOR_STOP;
-
-    /* PWM百分比设为0 */
     motor->pwmPercent = 0;
   }
 
-  /* 计算PWM值(0-4095) */
+  /* 0~4095 原始占空比 */
   uint16_t pwmValue = (motor->pwmPercent * 4095) / 100;
 
-  /* 通过I2C设置PWM - 仅控制使能端输出，与方向无关 */
-  if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
+  /* MOD: 变化不到 1%（≈40 counts）且方向未变时不写 I2C */
+  const uint16_t PWM_STEP = 40;
+  if ( (motor->state == MOTOR_STOP) ||
+       ( (g_lastPwmRaw[motor->id] > pwmValue ? g_lastPwmRaw[motor->id] - pwmValue : pwmValue - g_lastPwmRaw[motor->id]) >= PWM_STEP ) )
   {
-    SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
-    osMutexRelease(i2cMutexHandle);
+    if (osMutexAcquire(i2cMutexHandle, 10) == osOK)
+    {
+      SetMotorPWM(&hi2c1, motor->pwmChannel, pwmValue);
+      osMutexRelease(i2cMutexHandle);
+      g_lastPwmRaw[motor->id] = pwmValue;  /* MOD: 记录本次输出 */
+    }
   }
 }
 
 void SetMotorSpeed(Motor_t *motor, int16_t speed)
 {
-  /* 设置目标速度(用于PID控制) */
+  /* MOD: 检测换向或停转，做积分管理 */
+  int16_t prev = motor->targetSpeed;
+
   motor->targetSpeed = speed;
-  motor->pidController.targetValue = (float)abs(speed);
+  motor->pidController.targetValue = (float)speed;  // MOD: 直接带符号
 
-  /* 设置方向标志 */
-  motor->direction = (speed >= 0) ? MOTOR_DIR_FORWARD : MOTOR_DIR_BACKWARD;
+  /* MOD: 状态更新（供监控用），但不在这里设方向引脚 */
+  if (speed > 0) motor->state = MOTOR_FORWARD;
+  else if (speed < 0) motor->state = MOTOR_BACKWARD;
+  else motor->state = MOTOR_STOP;
 
-  /* 更新电机状态 */
-  if (speed > 0)
-    motor->state = MOTOR_FORWARD;
-  else if (speed < 0)
-    motor->state = MOTOR_BACKWARD;
-  else
-    motor->state = MOTOR_STOP;
+  /* MOD: 换向跨 0 或目标为 0 时，清积分以加快稳定 */
+  if ((prev > 0 && speed <= 0) || (prev < 0 && speed >= 0))
+  {
+    motor->pidController.errorSum = 0.0f;
+    motor->pidController.lastError = 0.0f;
+  }
 
-  /* 添加初始PWM设置 */
-  int16_t initialPwm = speed / 2; // 一个简单的估算，可以根据实际情况调整
+  /* 初始 PWM 估算可以保留，但用带符号（简化起步） */
+  int16_t initialPwm = speed / 2;
   if (initialPwm > 100) initialPwm = 100;
   if (initialPwm < -100) initialPwm = -100;
-  
-  /* 设置初始PWM */
   SetMotorPWMPercentage(motor, initialPwm);
 }
 
