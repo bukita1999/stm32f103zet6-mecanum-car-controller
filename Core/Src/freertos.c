@@ -94,6 +94,13 @@ const osThreadAttr_t MonitorTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for UsbRxTask */
+osThreadId_t UsbRxTaskHandle;
+const osThreadAttr_t UsbRxTask_attributes = {
+  .name = "UsbRxTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* Definitions for commandQueue */
 osMessageQueueId_t commandQueueHandle;
 const osMessageQueueAttr_t commandQueue_attributes = {
@@ -134,6 +141,7 @@ void StartDefaultTask(void *argument);
 void StartMotorControlTask(void *argument);
 void StartCommunicationTask(void *argument);
 void StartMonitorTask(void *argument);
+void StartTask05(void *argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -193,6 +201,9 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of MonitorTask */
   MonitorTaskHandle = osThreadNew(StartMonitorTask, NULL, &MonitorTask_attributes);
+
+  /* creation of UsbRxTask */
+  UsbRxTaskHandle = osThreadNew(StartTask05, NULL, &UsbRxTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -530,6 +541,24 @@ void StartMonitorTask(void *argument)
     osDelay(100);
   }
   /* USER CODE END StartMonitorTask */
+}
+
+/* USER CODE BEGIN Header_StartTask05 */
+/**
+* @brief Function implementing the UsbRxTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask05 */
+void StartTask05(void *argument)
+{
+  /* USER CODE BEGIN StartTask05 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTask05 */
 }
 
 /* Private application code --------------------------------------------------*/
