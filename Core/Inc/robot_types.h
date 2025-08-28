@@ -24,10 +24,10 @@ extern "C" {
 #define MOTOR_TARGET_RPM 8       /* 默认目标RPM值 */
 
 /* === 速度单位与换算建议（新增） === */
-#define SPEED_UNIT_ENC_CPS   1        /* MCU 内部统一使用 CPS */
-#define SPEED_UNIT_STR       "enc_cps"
+#define SPEED_UNIT_ENC_RPM   1        /* MCU 内部统一使用 RPM */
+#define SPEED_UNIT_STR       "rpm"
 
-/* 如果需要把 CPS 打印为 RPM，仅用于调试（不用于控制），请设定每转 ticks 数 */
+/* 如果需要把 RPM 打印为 RPM，仅用于调试（不用于控制），请设定每转 ticks 数 */
 #ifndef ENCODER_TICKS_PER_REV
 /* 这是“定时器实际计数/机械一转”的 ticks 数：
  * 强烈建议：靠实测（手动转一圈读取计数差）确认，而不是拍脑袋。
@@ -38,6 +38,12 @@ extern "C" {
 static inline int32_t enc_delta_to_cps(int32_t delta, uint32_t dt_ms){
   /* delta: 采样周期内的计数增量（带符号） */
   return (int32_t)((1000LL * delta) / (int32_t)dt_ms);
+}
+static inline int32_t enc_delta_to_rpm(int32_t delta, uint32_t dt_ms){
+  /* delta: 采样周期内的计数增量（带符号） */
+  /* 使用64位整数进行计算以避免溢出 */
+  int64_t rpm = ((int64_t)delta * 60 * 1000) / ((int64_t)ENCODER_TICKS_PER_REV * dt_ms);
+  return (int32_t)rpm;
 }
 static inline float cps_to_rpm(int32_t cps){
   return (float)cps * 60.0f / (float)ENCODER_TICKS_PER_REV;

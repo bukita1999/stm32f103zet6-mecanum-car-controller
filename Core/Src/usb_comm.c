@@ -81,14 +81,14 @@ void USB_SendTelemetry(void){
   Telemetry_t t; uint8_t raw[128], *p = raw;
 
   /* === 新增：单位声明 TLV === */
-  UsbSpeedUnit_t unit = { .code = SPEED_UNIT_CODE_ENC_CPS };
-  memcpy(unit.name, SPEED_UNIT_STR, sizeof("enc_cps"));  // 包含终止符也没问题
+  UsbSpeedUnit_t unit = { .code = SPEED_UNIT_CODE_ENC_RPM };
+  memcpy(unit.name, SPEED_UNIT_STR, sizeof("rpm"));  // 包含终止符也没问题
   p = tlv_put(p, TLV_SPEED_UNIT, &unit, sizeof(unit));
 
   if (osMutexAcquire(motorDataMutexHandle, 10) == osOK){
     for (int i=0;i<4;i++){
-      t.m[i].tgt = systemState.motors[i].targetSpeed;  // CPS
-      t.m[i].spd = systemState.motors[i].currentSpeed; // CPS
+      t.m[i].tgt = systemState.motors[i].targetSpeed;  // RPM
+      t.m[i].spd = systemState.motors[i].currentSpeed; // RPM
       t.m[i].pwm = systemState.motors[i].pwmPercent;
       t.m[i].err = systemState.motors[i].pidController.error;
     }

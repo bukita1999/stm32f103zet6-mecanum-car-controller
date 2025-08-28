@@ -521,7 +521,7 @@ void StartMonitorTask(void *argument)
         for (uint8_t i = 0; i < 4; i++)
         {
           snprintf(uartTxBuffer, sizeof(uartTxBuffer),
-                  "Motor%d: Target:%d Current:%d CPS, PWM:%d%%, Error:%.2f\r\n",
+                  "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%.2f\r\n",
                   i + 1,
                   systemState.motors[i].targetSpeed,
                   systemState.motors[i].currentSpeed,
@@ -737,7 +737,7 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint
  * @brief 计算电机速度
  * @param motor: 电机结构体指针
  * @param deltaTime: 时间差(ms)
- * @return int16_t: 计算得到的速度(CPS)
+ * @return int16_t: 计算得到的速度(RPM)
  */
 int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
 {
@@ -748,28 +748,28 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
   motor->lastEncoderCount = cur;
   motor->encoderCount += encoderDelta;
 
-  /* === 改：速度换算为 CPS（带符号） === */
-  int32_t cps = enc_delta_to_cps(encoderDelta, deltaTime);
+  /* === 改：速度换算为 RPM（带符号） === */
+  int32_t rpm = enc_delta_to_rpm(encoderDelta, deltaTime);
 
   /* 裁剪到 int16_t（如担心溢出可把结构体字段升到 int32_t） */
-  if (cps > INT16_MAX) cps = INT16_MAX;
-  if (cps < INT16_MIN) cps = INT16_MIN;
-  motor->currentSpeed = (int16_t)cps;
+  if (rpm > INT16_MAX) rpm = INT16_MAX;
+  if (rpm < INT16_MIN) rpm = INT16_MIN;
+  motor->currentSpeed = (int16_t)rpm;
 
-  /* 堵转检测阈值使用 CPS；若不方便知道等效阈值，可先关闭或用 PWM+速度双判 */
+  /* 堵转检测阈值使用 RPM；若不方便知道等效阈值，可先关闭或用 PWM+速度双判 */
 #if 1
-  const int16_t STALL_TGT_TH_CPS = rpm_to_cps(20.f);  // 旧逻辑等效
-  const int16_t STALL_CUR_TH_CPS = rpm_to_cps(5.f);
-  if (abs(motor->targetSpeed) > STALL_TGT_TH_CPS && abs(motor->currentSpeed) < STALL_CUR_TH_CPS)
+  const int16_t STALL_TGT_TH_RPM = 20;  // 旧逻辑等效
+  const int16_t STALL_CUR_TH_RPM = 5;
+  if (abs(motor->targetSpeed) > STALL_TGT_TH_RPM && abs(motor->currentSpeed) < STALL_CUR_TH_RPM)
 #else
-  if (abs(motor->pwmPercent) > 30 && abs(motor->currentSpeed) < rpm_to_cps(3.f))
+  if (abs(motor->pwmPercent) > 30 && abs(motor->currentSpeed) < 3)
 #endif
   {
     if (++motor->errorCounter > 50) motor->flags.stalled = 1;
   } else {
     motor->errorCounter = 0;
   }
-  return motor->currentSpeed;  // 现在的单位 = CPS
+  return motor->currentSpeed;  // 现在的单位 = RPM
 }
 
 void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)

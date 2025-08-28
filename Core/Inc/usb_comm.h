@@ -17,11 +17,11 @@ typedef struct __attribute__((packed)) { MotorTelem_t m[4]; } Telemetry_t;
 
 #define TLV_TELEMETRY        0x10
 #define TLV_SPEED_UNIT       0x11  /* payload: {u8 code; char name[8]} */
-#define SPEED_UNIT_CODE_ENC_CPS  1
+#define SPEED_UNIT_CODE_ENC_RPM  1
 
 typedef struct __attribute__((packed)){
-  uint8_t code;      /* 1 = enc_cps */
-  char    name[8];   /* "enc_cps"   */
+  uint8_t code;      /* 1 = rpm */
+  char    name[8];   /* "rpm"   */
 } UsbSpeedUnit_t;
 
 // --- TLV 辅助 ---
