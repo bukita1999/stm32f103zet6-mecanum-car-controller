@@ -60,16 +60,12 @@ extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim5;
 
-/* 函数声明 */
-void MotorSystemInit(void);
-void MotorInit(Motor_t* motor, uint8_t id, TIM_HandleTypeDef* encoderTimer, uint8_t pwmChannel,
-               GPIO_TypeDef* dir0Port, uint16_t dir0Pin, 
-               GPIO_TypeDef* dir1Port, uint16_t dir1Pin);
-void PIDInit(PIDController_t* pid, float kp, float ki, float kd, float min, float max);
-float PIDCompute(PIDController_t* pid, float deltaTimeSeconds);
-int16_t CalculateMotorSpeed(Motor_t* motor, uint32_t deltaTime);
-void SetMotorSpeed(Motor_t* motor, int16_t speed);
-void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent);
+/* 模块头文件包含 */
+#include "motor_control.h"
+#include "communication.h" 
+#include "monitor.h"
+#include "usb_handler.h"
+#include "pid_controller.h"
 
 /* USER CODE END ET */
 
