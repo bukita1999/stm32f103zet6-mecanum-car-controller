@@ -1,4 +1,4 @@
-# Compiled object files
+# STM32 相关
 *.o
 *.d
 *.su
@@ -13,3 +13,81 @@
 
 # Debug directory
 Debug/
+
+# Python 相关文件 (python/ 目录下)
+python/__pycache__/
+python/*.py[cod]
+python/*$py.class
+python/*.so
+python/.Python
+python/build/
+python/develop-eggs/
+python/dist/
+python/downloads/
+python/eggs/
+python/.eggs/
+python/lib/
+python/lib64/
+python/parts/
+python/sdist/
+python/var/
+python/wheels/
+python/pip-wheel-metadata/
+python/share/python-wheels/
+python/*.egg-info/
+python/.installed.cfg
+python/*.egg
+python/MANIFEST
+
+# Python 虚拟环境 (python/ 目录下)
+python/.env
+python/.venv
+python/env/
+python/venv/
+python/ENV/
+python/env.bak/
+python/venv.bak/
+
+# IDE 相关 (python/ 目录下)
+python/.idea/
+python/.vscode/
+python/*.swp
+python/*.swo
+python/*~
+
+# 测试相关 (python/ 目录下)
+python/.coverage
+python/.pytest_cache/
+python/.tox/
+python/.nox/
+python/coverage.xml
+python/*.cover
+python/*.py,cover
+python/.hypothesis/
+
+# 项目特定文件 (python/ 目录下)
+python/test_results/
+python/*.csv
+python/*.log
+python/*.tmp
+
+# 串口配置（可能包含敏感信息）
+python/serial_config.json
+
+# 数据文件 (python/ 目录下)
+python/data/
+python/logs/
+python/output/
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# uv 相关 (python/ 目录下)
+python/.python-version
+python/uv.lock

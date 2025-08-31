@@ -1,0 +1,61 @@
+[project]
+name = "stm32-usb-test"
+version = "0.1.0"
+description = "STM32小车USB通讯测试程序 - 基于异步框架的TLV协议通讯工具"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyserial-asyncio>=0.6",
+    "pandas>=1.5.0",
+    "crcmod>=1.7",
+]
+authors = [
+    {name = "STM32 Car Project", email = "stm32car@example.com"},
+]
+keywords = ["stm32", "usb", "communication", "tlv", "robotics", "motor-control"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Communications",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+stm32-test = "test_stm32_communication:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90", "I", "N", "UP", "S", "B", "A", "COM", "DTZ", "EM", "ISC", "ICN", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "INT", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
+ignore = ["S101", "S603", "S607"]  # 忽略assert使用和subprocess相关的安全警告
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
