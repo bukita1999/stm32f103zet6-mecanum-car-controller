@@ -29,7 +29,7 @@ extern "C" {
 #include "main.h"
 #include "robot_types.h"
 #include "motor_control.h"
-#include "usb_comm.h"
+
 #include "cmsis_os.h"
 
 /* Exported types ------------------------------------------------------------*/

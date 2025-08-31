@@ -27,17 +27,12 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "usb_comm.h"
-#include "stream_buffer.h"
-#include "cmsis_os.h"
 
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
-#define USB_RX_STREAM_SIZE   1024
 
 /* Exported macro ------------------------------------------------------------*/
 /* Exported variables --------------------------------------------------------*/
-extern StreamBufferHandle_t usbRxStreamHandle;
 
 /* Exported functions prototypes ---------------------------------------------*/
 void StartTask05(void *argument);

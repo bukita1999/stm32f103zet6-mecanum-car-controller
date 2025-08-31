@@ -22,10 +22,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-#include "FreeRTOS.h"
-#include "stream_buffer.h"
 #include <string.h>
-extern StreamBufferHandle_t usbRxStreamHandle;
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -97,13 +94,7 @@ uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 
 /* USER CODE BEGIN PRIVATE_VARIABLES */
-/* Default Line Coding: 115200 bps, 1 stop bit, no parity, 8 data bits */
-static USBD_CDC_LineCodingTypeDef LineCoding = {
-  115200,  /* baud rate */
-  0x00,    /* stop bits: 1 */
-  0x00,    /* parity: none */
-  0x08     /* data bits: 8 */
-};
+
 /* USER CODE END PRIVATE_VARIABLES */
 
 /**
@@ -227,21 +218,11 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
   /* 6      | bDataBits  |   1   | Number Data bits (5, 6, 7, 8 or 16).          */
   /*******************************************************************************/
     case CDC_SET_LINE_CODING:
-      /* 设置线路编码参数 */
-      if (length >= sizeof(USBD_CDC_LineCodingTypeDef))
-      {
-        memcpy(&LineCoding, pbuf, sizeof(USBD_CDC_LineCodingTypeDef));
-        /* 注意：在实际应用中，这里可以验证参数并配置实际的UART硬件 */
-        /* 对于虚拟串口，我们只需要存储这些参数即可 */
-      }
+
     break;
 
     case CDC_GET_LINE_CODING:
-      /* 获取线路编码参数 */
-      if (length >= sizeof(USBD_CDC_LineCodingTypeDef))
-      {
-        memcpy(pbuf, &LineCoding, sizeof(USBD_CDC_LineCodingTypeDef));
-      }
+
     break;
 
     case CDC_SET_CONTROL_LINE_STATE:
@@ -278,12 +259,12 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-  BaseType_t hpw = pdFALSE;
-  (void)xStreamBufferSendFromISR(usbRxStreamHandle, Buf, *Len, &hpw);
-  portYIELD_FROM_ISR(hpw);
-
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+  
+  USB_CDC_RxHandler(UserRxBufferFS, *Len);
+  memset(UserRxBufferFS, '\0', *Len);
+  
   return (USBD_OK);
   /* USER CODE END 6 */
 }

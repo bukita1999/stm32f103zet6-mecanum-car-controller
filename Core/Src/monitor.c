@@ -92,13 +92,7 @@ void StartMonitorTask(void *argument)
       /* 可以添加其他系统参数监控，如温度、电压等 */
     }
     
-    /* 每100ms发送一次Telemetry */
-    static uint32_t lastTelemetryTime = 0;
-    uint32_t now = osKernelGetTickCount();
-    if (now - lastTelemetryTime >= 100) {
-      lastTelemetryTime = now;
-      USB_SendTelemetry();
-    }
+    /* USB CDC已经通过定时任务发送Hello World消息 */
     
     /* 监控任务周期 */
     osDelay(100);

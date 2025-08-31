@@ -19,60 +19,48 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "usb_handler.h"
+#include "usbd_cdc_if.h"
+#include "cmsis_os.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-StreamBufferHandle_t usbRxStreamHandle;
-static uint8_t usbRxStreamStorage[USB_RX_STREAM_SIZE];
-static StaticStreamBuffer_t usbRxStreamCtrl;
 
 /* Private function prototypes -----------------------------------------------*/
 
 /**
- * @brief USB接收任务函数
+ * @brief USB Hello World 定时发送任务
  * @param argument: 未使用
  * @retval None
  */
 void StartTask05(void *argument)
 {
-  uint8_t in[128];                 // 每次从流里拉一批
-  static uint8_t seg[USB_ENC_MAX]; // 暂存一帧的 COBS 片段
-  size_t seg_len = 0;
-
+  uint8_t TxBuffer[] = "Hello World! From STM32 USB CDC Device To Virtual COM Port\r\n";
+  uint8_t TxBufferLen = sizeof(TxBuffer) - 1; // 减去字符串结尾的\0
+  
   for(;;){
-    size_t n = xStreamBufferReceive(usbRxStreamHandle, in, sizeof(in), portMAX_DELAY);
-    for (size_t i=0; i<n; i++){
-      uint8_t b = in[i];
-      if (b == 0x00){
-        // ----- 到达帧尾：解码 + 校验 + 交业务 -----
-        uint8_t raw[USB_FRAME_MAX+4];
-        size_t  raw_len = cobs_decode(raw, sizeof(raw), seg, seg_len);
-        seg_len = 0;                              // 重置片段
-        if (raw_len >= 4){
-          uint32_t crc_got = *(uint32_t*)&raw[raw_len-4];
-          uint32_t crc_cal = crc32_zlib(raw, raw_len-4);
-          if (crc_got == crc_cal){
-            USB_HandleFrame(raw, (uint16_t)(raw_len - 4)); // payload
-          }
-          // CRC 错误直接丢弃，避免污染上层
-        }
-      }else{
-        // 累积片段；过长就丢弃这帧，避免溢出
-        if (seg_len < sizeof(seg)) seg[seg_len++] = b;
-        else seg_len = 0;
-      }
-    }
+    CDC_Transmit_FS(TxBuffer, TxBufferLen);
+    osDelay(1000); // 每1秒发送一次
   }
 }
 
 /**
- * @brief 初始化USB流缓冲区
+ * @brief 初始化USB处理器（现在只是一个空函数）
  */
 void USBHandler_Init(void)
 {
-  usbRxStreamHandle = xStreamBufferCreateStatic(
-      USB_RX_STREAM_SIZE, 1,            // 触发级别=1字节
-      usbRxStreamStorage, &usbRxStreamCtrl);
+  // 不需要任何初始化，保留函数以避免编译错误
+}
+
+/**
+ * @brief USB CDC 接收数据回调函数
+ * @param Buf: 接收到的数据缓冲区
+ * @param Len: 数据长度
+ * @retval None
+ */
+void USB_CDC_RxHandler(uint8_t* Buf, uint32_t Len)
+{
+  // 简单的回环测试 - 收到什么就发送什么
+  CDC_Transmit_FS(Buf, Len);
 }

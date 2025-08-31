@@ -82,7 +82,8 @@ extern TIM_HandleTypeDef htim5;
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+/* USB CDC 接收数据回调函数声明 */
+void USB_CDC_RxHandler(uint8_t* Buf, uint32_t Len);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

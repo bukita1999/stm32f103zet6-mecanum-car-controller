@@ -29,8 +29,6 @@
 #include "communication.h"
 #include "monitor.h"
 #include "usb_handler.h"
-#include "usb_comm.h"
-#include "stream_buffer.h"
 #include "usb_device.h"
 /* USER CODE END Includes */
 
@@ -205,8 +203,11 @@ void MX_FREERTOS_Init(void) {
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
-  /* init code for USB_DEVICE */
-  MX_USB_DEVICE_Init();
+  /* 等待USB初始化完成 */
+  osDelay(1000);
+  
+  /* USB已在main()中初始化 */
+  
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
   for (;;)
