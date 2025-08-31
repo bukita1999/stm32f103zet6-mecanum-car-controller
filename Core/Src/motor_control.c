@@ -293,11 +293,11 @@ void StartMotorControlTask(void *argument)
   /* 无限循环 */
   for (;;)
   {
-    /* 处理每个电机 */
-    for (uint8_t i = 0; i < 4; i++)
+    /* 一次性获取互斥量处理所有电机，减少竞争 */
+    if (osMutexAcquire(motorDataMutexHandle, 5) == osOK)
     {
-      /* 请求电机数据互斥量 */
-      if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
+      /* 处理每个电机 */
+      for (uint8_t i = 0; i < 4; i++)
       {
         /* 1) 速度计算（deltaTime 使用固定周期） */
         CalculateMotorSpeed(&systemState.motors[i], period_ms);
@@ -316,15 +316,15 @@ void StartMotorControlTask(void *argument)
 
         /* 5) 直接用控制量决定方向与占空比（不再额外翻转号） */
         SetMotorPWMPercentage(&systemState.motors[i], (int16_t)pidOut);
-
-        /* 释放电机数据互斥量 */
-        osMutexRelease(motorDataMutexHandle);
       }
-      else
-      {
-        /* 互斥量获取失败处理 */
-        systemState.systemFlags.motorError = 1;
-      }
+      
+      /* 释放电机数据互斥量 */
+      osMutexRelease(motorDataMutexHandle);
+    }
+    else
+    {
+      /* 互斥量获取失败处理 - 偶尔失败是可以接受的 */
+      systemState.systemFlags.motorError = 1;
     }
 
     /* 触发电机数据更新事件 */

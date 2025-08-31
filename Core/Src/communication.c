@@ -58,32 +58,11 @@ void StartCommunicationTask(void *argument)
   /* 任务主循环 */
   for (;;)
   {
-    /* 等待电机数据更新事件或通信事件 */
+    /* 优先处理通信事件，提高响应速度 */
     uint32_t eventFlag = osEventFlagsWait(systemEventGroupHandle,
-                                          EVENT_MOTOR_UPDATE | EVENT_COMMUNICATION,
+                                          EVENT_COMMUNICATION,
                                           osFlagsWaitAny,
-                                          100);
-
-    /* 如果电机更新事件触发 */
-    if ((eventFlag & EVENT_MOTOR_UPDATE) == EVENT_MOTOR_UPDATE)
-    {
-      /* 请求电机数据互斥量 */
-      if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
-      {
-        /* 格式化电机速度数据 - 这里注释掉，避免过多输出 */
-        // int len = sprintf(uartTxBuffer, "SPD,%d,%d,%d,%d\r\n",
-        //                   systemState.motors[0].currentSpeed,
-        //                   systemState.motors[1].currentSpeed,
-        //                   systemState.motors[2].currentSpeed,
-        //                   systemState.motors[3].currentSpeed);
-
-        /* 释放电机数据互斥量 */
-        osMutexRelease(motorDataMutexHandle);
-
-        /* 通过UART发送数据 - 注释掉 */
-        // HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
-      }
-    }
+                                          10); // 减少等待时间
 
     /* 处理接收到的命令 */
     if ((eventFlag & EVENT_COMMUNICATION) == EVENT_COMMUNICATION)
@@ -103,29 +82,59 @@ void StartCommunicationTask(void *argument)
         {
           /* 输出接收到的命令用于调试 */
           int len = sprintf(uartTxBuffer, "Received: %s#\r\n", rxBuffer);
-          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
+          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
           
-          /* 解析命令参数 */
-          char *token = strtok((char *)&rxBuffer[5], ",");
-          int motorId = 0;
+          /* 创建一个工作字符串副本用于解析，避免破坏原始数据 */
+          char workBuffer[64];
+          strcpy(workBuffer, (char *)&rxBuffer[5]);
           
-          while (token != NULL && motorId < 4)
+          /* 先解析所有参数，存储到临时数组 */
+          int16_t speeds[4] = {0};
+          int validMotors = 0;
+          char *token = strtok(workBuffer, ",");
+          
+          /* 解析所有速度参数 */
+          while (token != NULL && validMotors < 4)
           {
-            int16_t speed = atoi(token);
+            speeds[validMotors] = atoi(token);
             
-            /* 设置电机速度 */
-            if (osMutexAcquire(motorDataMutexHandle, 10) == osOK)
-            {
-              SetMotorSpeed(&systemState.motors[motorId], speed);
-              osMutexRelease(motorDataMutexHandle);
-              
-              /* 确认消息 */
-              len = sprintf(uartTxBuffer, "ACK,M%d,%d\r\n", motorId, speed);
-              HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
-            }
+            /* 输出解析过程调试信息 - 注释掉以提高响应速度 */
+            // len = sprintf(uartTxBuffer, "Parsing M%d: %s -> %d\r\n", validMotors, token, speeds[validMotors]);
+            // HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
             
             token = strtok(NULL, ",");
-            motorId++;
+            validMotors++;
+          }
+          
+          /* 输出当前尝试设置的速度，用于调试 */
+          len = sprintf(uartTxBuffer, "Setting: M0=%d,M1=%d,M2=%d,M3=%d\r\n", 
+                       (validMotors>0)?speeds[0]:0, (validMotors>1)?speeds[1]:0, 
+                       (validMotors>2)?speeds[2]:0, (validMotors>3)?speeds[3]:0);
+          HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
+          
+          /* 尝试获取互斥量，增加超时时间 */
+          osStatus_t mutexStatus = osMutexAcquire(motorDataMutexHandle, 200);
+          if (mutexStatus == osOK)
+          {
+            /* 先设置所有电机，减少互斥量占用时间 */
+            for (int motorId = 0; motorId < validMotors; motorId++)
+            {
+              SetMotorSpeed(&systemState.motors[motorId], speeds[motorId]);
+            }
+            osMutexRelease(motorDataMutexHandle);
+            
+            /* 释放互斥量后再发送确认消息，避免长时间占用 */
+            for (int motorId = 0; motorId < validMotors; motorId++)
+            {
+              len = sprintf(uartTxBuffer, "ACK,M%d,%d\r\n", motorId, speeds[motorId]);
+              HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
+            }
+          }
+          else
+          {
+            /* 互斥量获取失败，输出详细错误信息 */
+            len = sprintf(uartTxBuffer, "ERR,MUTEX_FAIL_ALL,STATUS=%d\r\n", (int)mutexStatus);
+            HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
           }
         }
         /* 处理PID参数设置命令 */
@@ -192,8 +201,11 @@ void StartCommunicationTask(void *argument)
       rxIndex = 0;
       HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
     }
-    
-    osDelay(10);
+    else
+    {
+      /* 没有通信事件时，短暂延时避免CPU占用过高 */
+      osDelay(5);
+    }
   }
 }
 
