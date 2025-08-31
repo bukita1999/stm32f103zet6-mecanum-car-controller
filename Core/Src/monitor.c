@@ -23,6 +23,7 @@
 #include "usart.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -59,13 +60,15 @@ void StartMonitorTask(void *argument)
         /* 报告所有电机状态 */
         for (uint8_t i = 0; i < 4; i++)
         {
+          /* 将浮点错误值转换为整数显示（乘以100保留2位小数精度） */
+          int16_t errorInt = (int16_t)(systemState.motors[i].pidController.error * 100);
           snprintf(uartTxBuffer, sizeof(uartTxBuffer),
-                  "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%.2f\r\n",
+                  "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%d.%02d\r\n",
                   i + 1,
                   systemState.motors[i].targetSpeed,
                   systemState.motors[i].currentSpeed,
                   systemState.motors[i].pwmPercent,
-                  systemState.motors[i].pidController.error);
+                  errorInt / 100, abs(errorInt % 100));
           
           /* 释放互斥量发送期间，避免长时间占用 */
           osMutexRelease(motorDataMutexHandle);

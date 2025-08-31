@@ -174,9 +174,15 @@ void StartCommunicationTask(void *argument)
                 
                 osMutexRelease(motorDataMutexHandle);
                 
-                /* 确认消息 */
-                len = sprintf(uartTxBuffer, "ACK,PID,M%d,%.3f,%.3f,%.3f\r\n", 
-                             motorId, kp, ki, kd);
+                /* 确认消息 - 将浮点数转换为整数输出 */
+                int16_t kpInt = (int16_t)(kp * 1000);
+                int16_t kiInt = (int16_t)(ki * 1000);
+                int16_t kdInt = (int16_t)(kd * 1000);
+                len = sprintf(uartTxBuffer, "ACK,PID,M%d,%d.%03d,%d.%03d,%d.%03d\r\n", 
+                             motorId, 
+                             kpInt / 1000, abs(kpInt % 1000),
+                             kiInt / 1000, abs(kiInt % 1000),
+                             kdInt / 1000, abs(kdInt % 1000));
                 HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
               }
             }
