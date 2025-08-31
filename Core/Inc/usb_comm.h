@@ -12,6 +12,7 @@ extern "C" {
 #define USB_ENC_MAX     (USB_FRAME_MAX + USB_FRAME_MAX/254 + 2) // COBS开销
 
 // 上报结构（小端；__packed 避免填充）
+// tgt, spd: 目标和当前速度 (RPM, 电机轴转速-减速前)
 typedef struct __attribute__((packed)) { int16_t tgt, spd; uint16_t pwm; float err; } MotorTelem_t;
 typedef struct __attribute__((packed)) { MotorTelem_t m[4]; } Telemetry_t;
 

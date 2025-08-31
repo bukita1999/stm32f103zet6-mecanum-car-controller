@@ -12,27 +12,29 @@ extern "C" {
 #include "cmsis_os.h"
 
 
-/* 电机PID控制参数 */
-#define MOTOR_PID_KP     0.029    /* 初始比例系数 */
-#define MOTOR_PID_KI     0.00146    /* 初始积分系数 */
-#define MOTOR_PID_KD     0.000146   /* 初始微分系数 */
+/* 电机PID控制参数 - 针对电机轴转速（减速前）*/
+#define MOTOR_PID_KP     0.2   /* 初始比例系数（针对电机轴转速调整）*/
+#define MOTOR_PID_KI     0.01 /* 初始积分系数（针对电机轴转速调整）*/
+#define MOTOR_PID_KD     0         /* 初始微分系数（针对电机轴转速调整）*/
 #define MOTOR_PID_MIN    -100.0f /* PID输出下限 */
 #define MOTOR_PID_MAX    100.0f  /* PID输出上限 */
 
-/* 电机RPM参数 */
-#define MOTOR_MAX_RPM    10      /* 最大RPM值 */
-#define MOTOR_TARGET_RPM 8       /* 默认目标RPM值 */
+/* 电机RPM参数 - 电机轴转速（减速前）*/
+#define MOTOR_MAX_RPM    1310     /* 最大RPM值（电机轴，10*131） */
+#define MOTOR_TARGET_RPM 1048     /* 默认目标RPM值（电机轴，8*131） */
 
 /* === 速度单位与换算建议（新增） === */
 #define SPEED_UNIT_ENC_RPM   1        /* MCU 内部统一使用 RPM */
 #define SPEED_UNIT_STR       "rpm"
 
-/* 如果需要把 RPM 打印为 RPM，仅用于调试（不用于控制），请设定每转 ticks 数 */
+/* 编码器计数配置 - 电机轴转速（减速前）*/
 #ifndef ENCODER_TICKS_PER_REV
-/* 这是“定时器实际计数/机械一转”的 ticks 数：
- * 强烈建议：靠实测（手动转一圈读取计数差）确认，而不是拍脑袋。
+/* 这是"定时器实际计数/电机轴机械一转"的 ticks 数：
+ * 计算：ENCODER_BASE_PPR * ENCODER_POLE_PAIRS * 4（象限倍频）
+ * = 11 * 11 * 4 = 484 ticks/转（电机轴）
+ * 注意：这里测量的是电机轴转速，不包含减速比
  */
-#define ENCODER_TICKS_PER_REV 4096
+#define ENCODER_TICKS_PER_REV (11 * 11 * 4)  /* 484 ticks per motor shaft revolution */
 #endif
 
 static inline int32_t enc_delta_to_cps(int32_t delta, uint32_t dt_ms){
@@ -42,6 +44,7 @@ static inline int32_t enc_delta_to_cps(int32_t delta, uint32_t dt_ms){
 static inline int32_t enc_delta_to_rpm(int32_t delta, uint32_t dt_ms){
   /* delta: 采样周期内的计数增量（带符号） */
   /* 使用64位整数进行计算以避免溢出 */
+  /* 返回电机轴转速(RPM，减速前) */
   int64_t rpm = ((int64_t)delta * 60 * 1000) / ((int64_t)ENCODER_TICKS_PER_REV * dt_ms);
   return (int32_t)rpm;
 }
@@ -87,8 +90,8 @@ typedef struct {
     uint8_t id;                /* 电机ID (0-3) */
     MotorState_t state;        /* 电机状态 */
     MotorDirection_t direction; /* 电机方向 */
-    int16_t targetSpeed;       /* 目标速度 (RPM) */
-    int16_t currentSpeed;      /* 当前速度 (RPM) */
+    int16_t targetSpeed;       /* 目标速度 (RPM, 电机轴转速-减速前) */
+    int16_t currentSpeed;      /* 当前速度 (RPM, 电机轴转速-减速前) */
     uint8_t pwmPercent;        /* PWM百分比 (0-100) */
     int32_t encoderCount;      /* 编码器计数 */
     int32_t lastEncoderCount;  /* 上次编码器计数 */

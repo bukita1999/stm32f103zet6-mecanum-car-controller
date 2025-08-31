@@ -111,7 +111,7 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint
  * @brief 计算电机速度
  * @param motor: 电机结构体指针
  * @param deltaTime: 时间差(ms)
- * @return int16_t: 计算得到的速度(RPM)
+ * @return int16_t: 计算得到的速度(RPM, 电机轴转速-减速前)
  */
 int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
 {
@@ -145,7 +145,7 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
 /**
  * @brief 设置电机速度
  * @param motor: 电机结构体指针
- * @param speed: 目标速度(RPM，带符号)
+ * @param speed: 目标速度(RPM，带符号，电机轴转速-减速前)
  */
 void SetMotorSpeed(Motor_t *motor, int16_t speed)
 {
