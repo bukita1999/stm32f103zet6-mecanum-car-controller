@@ -35,12 +35,8 @@ class STM32BatchDataReceiver:
         self.csv_writer = None
         self.csv_file = None
 
-        # 数据结构定义（与STM32端保持一致）
-        self.BATCH_SIZE = 10
-        self.FRAME_END = b'\x00'  # COBS帧结束符
-
-        # TLV类型定义
-        self.TLV_BATCH_DATA = 0x20
+        # 数据结构定义（文本模式，不再需要批量大小和帧同步）
+        # 直接接收STM32发送的文本格式数据
 
     def connect_serial(self):
         """连接到串口设备"""
@@ -59,148 +55,28 @@ class STM32BatchDataReceiver:
             print(f"串口连接失败: {e}")
             return False
 
-    def cobs_decode(self, encoded_data):
-        """
-        COBS解码函数
+    # COBS解码和CRC32校验方法已移除，现在使用文本模式直接解析
 
-        Args:
-            encoded_data: COBS编码的数据
-
-        Returns:
-            解码后的数据，失败返回None
-        """
-        if not encoded_data:
-            return None
-
-        output = []
-        i = 0
-
-        while i < len(encoded_data):
-            code = encoded_data[i]
-            i += 1
-
-            for j in range(1, code):
-                if i >= len(encoded_data):
-                    return None  # 数据不完整
-                output.append(encoded_data[i])
-                i += 1
-
-            if code < 0xFF and i < len(encoded_data):
-                output.append(0)
-
-        return bytes(output)
-
-    def crc32_verify(self, data, expected_crc):
-        """
-        验证CRC32校验码
-
-        Args:
-            data: 数据内容
-            expected_crc: 期望的CRC32值
-
-        Returns:
-            校验是否通过
-        """
-        calculated_crc = zlib.crc32(data) & 0xFFFFFFFF
-        return calculated_crc == expected_crc
-
-    def parse_batch_data(self, data):
-        """
-        解析批量数据
-
-        Args:
-            data: 批量数据内容
-
-        Returns:
-            解析后的数据字典列表
-        """
-        try:
-            # 解析批量数据包头
-            header_format = '<HHHHI'  # batch_id, data_count, reserved, start_time
-            header_size = struct.calcsize(header_format)
-
-            if len(data) < header_size:
-                print("数据长度不足，无法解析包头")
-                return None
-
-            # 解析包头（需要根据实际结构体调整）
-            batch_id = struct.unpack('<H', data[0:2])[0]
-            data_count = struct.unpack('<H', data[2:4])[0]
-            start_time = struct.unpack('<I', data[4:8])[0]
-
-            print(f"解析到批量数据: 批次ID={batch_id}, 数据组数={data_count}, 开始时间={start_time}")
-
-            # 解析数据内容
-            parsed_data = []
-            data_offset = 8  # 包头大小
-
-            for i in range(min(data_count, self.BATCH_SIZE)):
-                if data_offset + 36 > len(data):  # 每组数据36字节
-                    print(f"数据{i}长度不足")
-                    break
-
-                # 解析单组数据：timestamp(4) + speed[4](8) + pwm[4](8) + error[4](16) = 36字节
-                timestamp = struct.unpack('<I', data[data_offset:data_offset+4])[0]
-
-                speeds = []
-                for j in range(4):
-                    speed = struct.unpack('<h', data[data_offset+4+j*2:data_offset+6+j*2])[0]
-                    speeds.append(speed)
-
-                pwms = []
-                for j in range(4):
-                    pwm = struct.unpack('<H', data[data_offset+12+j*2:data_offset+14+j*2])[0]
-                    pwms.append(pwm)
-
-                errors = []
-                for j in range(4):
-                    error = struct.unpack('<f', data[data_offset+20+j*4:data_offset+24+j*4])[0]
-                    errors.append(error)
-
-                data_record = {
-                    'batch_id': batch_id,
-                    'data_index': i,
-                    'timestamp': timestamp,
-                    'motor0_speed': speeds[0],
-                    'motor1_speed': speeds[1],
-                    'motor2_speed': speeds[2],
-                    'motor3_speed': speeds[3],
-                    'motor0_pwm': pwms[0],
-                    'motor1_pwm': pwms[1],
-                    'motor2_pwm': pwms[2],
-                    'motor3_pwm': pwms[3],
-                    'motor0_error': errors[0],
-                    'motor1_error': errors[1],
-                    'motor2_error': errors[2],
-                    'motor3_error': errors[3],
-                    'receive_time': time.time()
-                }
-
-                parsed_data.append(data_record)
-                data_offset += 36  # 每组数据36字节
-
-            return parsed_data
-
-        except struct.error as e:
-            print(f"数据解析错误: {e}")
-            return None
+    # parse_batch_data方法已移除，现在使用文本解析方法
 
     def create_csv_file(self):
-        """创建CSV文件"""
+        """创建CSV文件（适配文本模式）"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"stm32_batch_data_{timestamp}.csv"
+        filename = f"stm32_text_data_{timestamp}.csv"
 
         self.csv_file = open(filename, 'w', newline='', encoding='utf-8')
         self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=[
             'batch_id', 'data_index', 'timestamp',
-            'motor0_speed', 'motor1_speed', 'motor2_speed', 'motor3_speed',
-            'motor0_pwm', 'motor1_pwm', 'motor2_pwm', 'motor3_pwm',
-            'motor0_error', 'motor1_error', 'motor2_error', 'motor3_error',
+            'motor0_target_speed', 'motor0_current_speed', 'motor0_pwm', 'motor0_error',
+            'motor1_target_speed', 'motor1_current_speed', 'motor1_pwm', 'motor1_error',
+            'motor2_target_speed', 'motor2_current_speed', 'motor2_pwm', 'motor2_error',
+            'motor3_target_speed', 'motor3_current_speed', 'motor3_pwm', 'motor3_error',
             'receive_time'
         ])
 
         self.csv_writer.writeheader()
         print(f"创建CSV文件: {filename}")
+        print("注意: 现在使用文本模式，数据来自STM32 UART监控输出格式")
 
     def save_to_csv(self, data_records):
         """将数据保存到CSV文件"""
@@ -214,60 +90,78 @@ class STM32BatchDataReceiver:
 
     def process_frame(self, frame_data):
         """
-        处理接收到的数据帧
+        处理接收到的数据帧（文本格式，与UART监控输出格式一致）
 
         Args:
-            frame_data: 接收到的帧数据（不含帧尾0x00）
+            frame_data: 接收到的帧数据
 
         Returns:
             处理是否成功
         """
         try:
-            # COBS解码
-            decoded_data = self.cobs_decode(frame_data)
-            if decoded_data is None:
-                print("COBS解码失败")
-                return False
+            # 将字节数据转换为字符串
+            text_data = frame_data.decode('utf-8', errors='ignore')
 
-            # 分离数据和CRC32校验码
-            if len(decoded_data) < 5:  # 最少需要TLV头(3字节) + CRC32(4字节)
-                print("数据长度太短")
-                return False
+            print(f"接收到数据帧: {len(text_data)}字符")
+            print(f"原始数据:\n{text_data}")
 
-            payload = decoded_data[:-4]  # 去除最后的CRC32
-            crc_bytes = decoded_data[-4:]
+            # 按行分割数据
+            lines = text_data.strip().split('\n')
 
-            # 解析CRC32
-            expected_crc = struct.unpack('<I', crc_bytes)[0]
+            parsed_records = []
+            motor_data = {}  # 临时存储电机数据
+            system_info = None
 
-            # 验证CRC32
-            if not self.crc32_verify(payload, expected_crc):
-                print("CRC32校验失败")
-                return False
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
 
-            print(f"接收到有效帧: 长度={len(decoded_data)}字节, CRC32=0x{expected_crc:08X}")
+                # 解析电机状态行
+                if line.startswith('Motor'):
+                    motor_record = self.parse_motor_line(line)
+                    if motor_record:
+                        motor_id = motor_record['data_index']
+                        motor_data[motor_id] = motor_record
 
-            # 解析TLV数据
-            if len(payload) < 3:
-                print("TLV数据长度不足")
-                return False
+                # 解析系统状态行
+                elif line.startswith('System:'):
+                    system_info = self.parse_system_line(line)
+                    if system_info:
+                        print(f"系统状态: {system_info}")
 
-            tlv_type = payload[0]
-            tlv_length = struct.unpack('<H', payload[1:3])[0]
-            tlv_value = payload[3:]
+            # 如果收集到了电机数据，合并为一条完整记录
+            if motor_data:
+                # 创建一条包含所有电机数据的记录
+                complete_record = {
+                    'batch_id': 0,
+                    'data_index': 0,  # 批量记录
+                    'timestamp': int(time.time() * 1000),
+                    'receive_time': time.time()
+                }
 
-            if tlv_type != self.TLV_BATCH_DATA:
-                print(f"不支持的TLV类型: 0x{tlv_type:02X}")
-                return False
+                # 为所有电机设置数据
+                for i in range(4):
+                    if i in motor_data:
+                        # 从对应的电机记录中获取数据
+                        motor_record = motor_data[i]
+                        complete_record[f'motor{i}_target_speed'] = motor_record[f'motor{i}_target_speed']
+                        complete_record[f'motor{i}_current_speed'] = motor_record[f'motor{i}_current_speed']
+                        complete_record[f'motor{i}_pwm'] = motor_record[f'motor{i}_pwm']
+                        complete_record[f'motor{i}_error'] = motor_record[f'motor{i}_error']
+                    else:
+                        # 如果某个电机没有数据，设为None
+                        complete_record[f'motor{i}_target_speed'] = None
+                        complete_record[f'motor{i}_current_speed'] = None
+                        complete_record[f'motor{i}_pwm'] = None
+                        complete_record[f'motor{i}_error'] = None
 
-            if len(tlv_value) != tlv_length:
-                print(f"TLV长度不匹配: 期望{tlv_length}, 实际{len(tlv_value)}")
-                return False
+                parsed_records.append(complete_record)
 
-            # 解析批量数据
-            parsed_data = self.parse_batch_data(tlv_value)
-            if parsed_data:
-                self.save_to_csv(parsed_data)
+            # 保存解析后的数据
+            if parsed_records:
+                self.save_to_csv(parsed_records)
+                print(f"成功解析并保存了 {len(parsed_records)} 条完整记录")
                 return True
 
             return False
@@ -276,49 +170,119 @@ class STM32BatchDataReceiver:
             print(f"帧处理错误: {e}")
             return False
 
+    def parse_motor_line(self, line):
+        """
+        解析电机状态行
+        格式: "Motor1: Target:1000 Current:950 RPM, PWM:75%, Error:5.00"
+
+        Args:
+            line: 电机状态行字符串
+
+        Returns:
+            解析后的数据字典
+        """
+        try:
+            # 使用正则表达式解析
+            import re
+
+            # 匹配模式: Motor1: Target:1000 Current:950 RPM, PWM:75%, Error:5.00
+            pattern = r'Motor(\d+): Target:(-?\d+) Current:(-?\d+) RPM, PWM:(\d+)%, Error:(-?\d+)\.(\d+)'
+            match = re.match(pattern, line)
+
+            if match:
+                motor_id = int(match.group(1)) - 1  # 转换为0-based索引
+                target_speed = int(match.group(2))
+                current_speed = int(match.group(3))
+                pwm_percent = int(match.group(4))
+                error_integer = int(match.group(5))
+                error_decimal = int(match.group(6))
+
+                # 重建误差值为浮点数
+                error = error_integer + error_decimal / 100.0
+                if error_integer < 0:
+                    error = error_integer - error_decimal / 100.0
+
+                # 构建记录（文本模式，单电机数据）
+                record = {
+                    'batch_id': 0,  # 文本模式下固定为0
+                    'data_index': motor_id,
+                    'timestamp': int(time.time() * 1000),  # 毫秒级时间戳
+                    'receive_time': time.time()
+                }
+
+                # 只为当前电机设置数据，其他电机字段设为空或0
+                for i in range(4):
+                    if i == motor_id:
+                        record[f'motor{i}_target_speed'] = target_speed
+                        record[f'motor{i}_current_speed'] = current_speed
+                        record[f'motor{i}_pwm'] = pwm_percent
+                        record[f'motor{i}_error'] = error
+                    else:
+                        # 其他电机没有数据，设为None或0
+                        record[f'motor{i}_target_speed'] = None
+                        record[f'motor{i}_current_speed'] = None
+                        record[f'motor{i}_pwm'] = None
+                        record[f'motor{i}_error'] = None
+
+                return record
+            else:
+                print(f"无法解析电机行: {line}")
+                return None
+
+        except Exception as e:
+            print(f"解析电机行错误: {e}")
+            return None
+
+    def parse_system_line(self, line):
+        """
+        解析系统状态行
+        格式: "System: Init=1, PCA9685=0, MotorErr=0"
+
+        Args:
+            line: 系统状态行字符串
+
+        Returns:
+            系统状态信息字符串
+        """
+        try:
+            # 简单的字符串提取
+            if 'Init=' in line and 'PCA9685=' in line and 'MotorErr=' in line:
+                return line.replace('System: ', '')
+            return None
+        except Exception as e:
+            print(f"解析系统行错误: {e}")
+            return None
+
     def receive_data_loop(self):
-        """主数据接收循环"""
+        """主数据接收循环（文本模式）"""
         if not self.serial:
             print("串口未连接")
             return
 
         print("开始接收数据... (按Ctrl+C退出)")
-
-        buffer = b''
-        frame_count = 0
-        success_count = 0
+        print("注意: 现在使用文本模式，直接接收STM32发送的电机状态信息")
 
         try:
             while True:
-                # 读取数据
+                # 读取可用数据
                 if self.serial.in_waiting > 0:
                     data = self.serial.read(self.serial.in_waiting)
-                    buffer += data
 
-                # 查找帧边界
-                frame_end = buffer.find(self.FRAME_END)
-                while frame_end != -1:
-                    frame_data = buffer[:frame_end]  # 提取帧数据
-                    buffer = buffer[frame_end + 1:]  # 移除已处理的数据
-
-                    frame_count += 1
-
-                    # 处理帧数据
-                    if self.process_frame(frame_data):
-                        success_count += 1
-
-                    # 查找下一个帧
-                    frame_end = buffer.find(self.FRAME_END)
+                    # 处理接收到的数据
+                    if self.process_frame(data):
+                        print("✓ 成功处理一批数据")
+                    else:
+                        print("✗ 数据处理失败")
 
                 # 调整延时以适应100ms发送间隔
-                time.sleep(0.005)  # 5ms延时，减少CPU占用同时保持响应性
+                time.sleep(0.01)  # 10ms延时
 
         except KeyboardInterrupt:
             print("\n用户中断接收")
         except Exception as e:
             print(f"接收循环错误: {e}")
         finally:
-            print(f"\n接收统计: 总帧数={frame_count}, 成功处理={success_count}")
+            print("\n接收程序结束")
 
     def close(self):
         """关闭连接和文件"""

@@ -42,20 +42,25 @@ def test_csv_writing():
         return False
 
 
-def test_batch_size_config():
-    """测试批量大小配置"""
-    print("🔧 测试批量大小配置...")
+def test_text_mode_config():
+    """测试文本模式配置"""
+    print("🔧 测试文本模式配置...")
     try:
         from batch_data_receiver import STM32BatchDataReceiver
         receiver = STM32BatchDataReceiver()
-        if receiver.BATCH_SIZE == 10:
-            print("✅ 批量大小配置正确: 10组/批次")
+
+        # 测试文本解析功能
+        test_line = "Motor1: Target:1000 Current:950 RPM, PWM:75%, Error:5.00"
+        motor_data = receiver.parse_motor_line(test_line)
+
+        if motor_data and motor_data['motor0_target_speed'] == 1000:
+            print("✅ 文本解析功能正常")
             return True
         else:
-            print(f"❌ 批量大小配置错误: {receiver.BATCH_SIZE} (应为10)")
+            print("❌ 文本解析功能异常")
             return False
     except Exception as e:
-        print(f"❌ 批量大小测试失败: {e}")
+        print(f"❌ 文本模式测试失败: {e}")
         return False
 
 
@@ -73,7 +78,7 @@ def run_quick_test():
     if test_csv_writing():
         tests_passed += 1
 
-    if test_batch_size_config():
+    if test_text_mode_config():
         tests_passed += 1
 
     print(f"\n📊 测试结果: {tests_passed}/{total_tests} 通过")

@@ -37,22 +37,28 @@
  * @retval None
  */
 /* USB任务的上下文变量 */
-#define BATCH_SIZE          10      /* 每批发送10组数据 */
-#define BATCH_DATA_SIZE     (sizeof(BatchHeader_t) + BATCH_SIZE * sizeof(BatchData_t))
-#define TLV_BUFFER_SIZE     (BATCH_DATA_SIZE + 10)  /* TLV数据缓冲区 */
-#define FRAME_BUFFER_SIZE   (TLV_BUFFER_SIZE + CRC32_SIZE + COBS_OVERHEAD + 10)
+/* 文本模式配置 */
+#define TEXT_BUFFER_SIZE    512     /* 文本数据缓冲区大小 (足够存放4个电机+系统状态的文本) */
 
-static uint8_t tlvBuffer[TLV_BUFFER_SIZE];           /* TLV数据缓冲区 */
+static uint8_t textBuffer[TEXT_BUFFER_SIZE];         /* 文本数据缓冲区 */
+#if 0  /* 文本模式下不再需要帧缓冲区 */
 static uint8_t frameBuffer[FRAME_BUFFER_SIZE];      /* 完整帧缓冲区 */
+#endif
+/* 文本模式下不再需要批次ID计数器 */
+#if 0
 static uint16_t batchId = 0;                        /* 批次ID计数器 */
+#endif
 static uint32_t baseTimestamp = 0;                  /* 基准时间戳 */
 
 /**
- * @brief 生成模拟的批量数据
+ * @brief 生成模拟的批量数据 (已废弃，现在使用文本模式)
  * @param header: 批量数据包头
  * @param data: 批量数据数组
  * @param count: 数据组数
+ *
+ * 注意: 此函数在文本模式下不再使用，仅保留以防将来需要
  */
+#if 0  /* 注释掉不再使用的函数 */
 static void GenerateBatchData(BatchHeader_t *header, BatchData_t *data, uint16_t count)
 {
     /* 设置包头 */
@@ -77,37 +83,61 @@ static void GenerateBatchData(BatchHeader_t *header, BatchData_t *data, uint16_t
         }
     }
 }
+#endif
 
 /**
- * @brief 打包并发送批量数据
+ * @brief 打包并发送批量数据（文本格式，与UART监控输出格式一致）
  * @return 发送结果
  */
 static uint8_t SendBatchData(void)
 {
-    /* 生成批量数据 */
-    BatchHeader_t *header = (BatchHeader_t *)tlvBuffer;
-    BatchData_t *data = (BatchData_t *)(tlvBuffer + sizeof(BatchHeader_t));
+    uint16_t totalLen = 0;
+    char *buffer = (char *)textBuffer;  // 使用文本缓冲区
 
-    GenerateBatchData(header, data, BATCH_SIZE);
-
-    /* 计算TLV数据总长度 */
-    uint16_t tlvDataLen = sizeof(BatchHeader_t) + BATCH_SIZE * sizeof(BatchData_t);
-
-    /* 构建TLV数据 */
-    uint8_t *p = tlvBuffer;
-    p = tlv_put(p, TLV_BATCH_DATA, tlvBuffer, tlvDataLen);
-
-    uint16_t payloadLen = p - tlvBuffer;
-
-    /* 构建完整帧 */
-    size_t frameLen = usb_build_frame(frameBuffer, FRAME_BUFFER_SIZE, tlvBuffer, payloadLen);
-
-    if (frameLen == 0) {
-        return USBD_FAIL;  /* 构建帧失败 */
+    /* 获取互斥量保护电机数据 */
+    if (osMutexAcquire(motorDataMutexHandle, 100) != osOK) {
+        return USBD_FAIL;
     }
 
-    /* 发送帧数据 */
-    return CDC_Transmit_Buffer(frameBuffer, (uint16_t)frameLen);
+    /* 构建电机状态文本数据（与UART监控输出格式完全一致） */
+    for (uint8_t i = 0; i < 4; i++) {
+        /* 将浮点错误值转换为整数显示（乘以100保留2位小数精度） */
+        int16_t errorInt = (int16_t)(systemState.motors[i].pidController.error * 100);
+
+        /* 构建单行电机状态信息 */
+        int len = snprintf(buffer + totalLen, TEXT_BUFFER_SIZE - totalLen,
+                "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%d.%02d\r\n",
+                i + 1,
+                systemState.motors[i].targetSpeed,
+                systemState.motors[i].currentSpeed,
+                systemState.motors[i].pwmPercent,
+                errorInt / 100, abs(errorInt % 100));
+
+        if (len > 0 && totalLen + len < TEXT_BUFFER_SIZE) {
+            totalLen += len;
+        } else {
+            /* 缓冲区空间不足 */
+            osMutexRelease(motorDataMutexHandle);
+            return USBD_FAIL;
+        }
+    }
+
+    /* 添加系统状态信息 */
+    int len = snprintf(buffer + totalLen, TEXT_BUFFER_SIZE - totalLen,
+            "System: Init=%d, PCA9685=%d, MotorErr=%d\r\n",
+            systemState.systemFlags.initialized,
+            systemState.systemFlags.pca9685Error,
+            systemState.systemFlags.motorError);
+
+    if (len > 0 && totalLen + len < TEXT_BUFFER_SIZE) {
+        totalLen += len;
+    }
+
+    /* 释放互斥量 */
+    osMutexRelease(motorDataMutexHandle);
+
+    /* 发送文本数据 */
+    return CDC_Transmit_Buffer((uint8_t *)buffer, totalLen);
 }
 
 /**
