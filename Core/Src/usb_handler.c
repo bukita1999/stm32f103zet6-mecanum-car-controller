@@ -19,8 +19,10 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "usb_handler.h"
+#include "usb_comm.h"
 #include "usbd_cdc_if.h"
 #include "cmsis_os.h"
+#include <stdlib.h>
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -35,8 +37,78 @@
  * @retval None
  */
 /* USB任务的上下文变量 */
-static uint8_t usbTxBuffer[] = "Hello World! From STM32 USB CDC Device To Virtual COM Port\r\n";
-static uint8_t usbTxBufferLen;
+#define BATCH_SIZE          100     /* 每批发送100组数据 */
+#define BATCH_DATA_SIZE     (sizeof(BatchHeader_t) + BATCH_SIZE * sizeof(BatchData_t))
+#define TLV_BUFFER_SIZE     (BATCH_DATA_SIZE + 10)  /* TLV数据缓冲区 */
+#define FRAME_BUFFER_SIZE   (TLV_BUFFER_SIZE + CRC32_SIZE + COBS_OVERHEAD + 10)
+
+static uint8_t tlvBuffer[TLV_BUFFER_SIZE];           /* TLV数据缓冲区 */
+static uint8_t frameBuffer[FRAME_BUFFER_SIZE];      /* 完整帧缓冲区 */
+static uint16_t batchId = 0;                        /* 批次ID计数器 */
+static uint32_t baseTimestamp = 0;                  /* 基准时间戳 */
+
+/**
+ * @brief 生成模拟的批量数据
+ * @param header: 批量数据包头
+ * @param data: 批量数据数组
+ * @param count: 数据组数
+ */
+static void GenerateBatchData(BatchHeader_t *header, BatchData_t *data, uint16_t count)
+{
+    /* 设置包头 */
+    header->batch_id = batchId++;
+    header->data_count = count;
+    header->start_time = HAL_GetTick();
+
+    /* 生成模拟数据 */
+    for (uint16_t i = 0; i < count; i++) {
+        data[i].timestamp = header->start_time + i * 10;  /* 每10ms一组数据 */
+
+        /* 模拟四个电机的速度数据 */
+        for (int motor = 0; motor < 4; motor++) {
+            /* 速度范围: -1310 ~ +1310 RPM */
+            data[i].speed[motor] = (int16_t)(rand() % 2621 - 1310);
+
+            /* PWM百分比: 0-100 */
+            data[i].pwm[motor] = (uint16_t)(rand() % 101);
+
+            /* PID误差: -50.0 ~ +50.0 */
+            data[i].error[motor] = (float)(rand() % 10001 - 5000) / 100.0f;
+        }
+    }
+}
+
+/**
+ * @brief 打包并发送批量数据
+ * @return 发送结果
+ */
+static uint8_t SendBatchData(void)
+{
+    /* 生成批量数据 */
+    BatchHeader_t *header = (BatchHeader_t *)tlvBuffer;
+    BatchData_t *data = (BatchData_t *)(tlvBuffer + sizeof(BatchHeader_t));
+
+    GenerateBatchData(header, data, BATCH_SIZE);
+
+    /* 计算TLV数据总长度 */
+    uint16_t tlvDataLen = sizeof(BatchHeader_t) + BATCH_SIZE * sizeof(BatchData_t);
+
+    /* 构建TLV数据 */
+    uint8_t *p = tlvBuffer;
+    p = tlv_put(p, TLV_BATCH_DATA, tlvBuffer, tlvDataLen);
+
+    uint16_t payloadLen = p - tlvBuffer;
+
+    /* 构建完整帧 */
+    size_t frameLen = usb_build_frame(frameBuffer, FRAME_BUFFER_SIZE, tlvBuffer, payloadLen);
+
+    if (frameLen == 0) {
+        return USBD_FAIL;  /* 构建帧失败 */
+    }
+
+    /* 发送帧数据 */
+    return CDC_Transmit_Buffer(frameBuffer, (uint16_t)frameLen);
+}
 
 /**
  * @brief USB任务初始化函数
@@ -45,7 +117,11 @@ static uint8_t usbTxBufferLen;
  */
 void UsbTask_Init(void *argument)
 {
-  usbTxBufferLen = sizeof(usbTxBuffer) - 1; // 减去字符串结尾的\0
+    /* 初始化随机数种子 */
+    srand(HAL_GetTick());
+
+    /* 初始化基准时间戳 */
+    baseTimestamp = HAL_GetTick();
 }
 
 /**
@@ -54,8 +130,15 @@ void UsbTask_Init(void *argument)
  */
 void UsbTask_Loop(void)
 {
-  CDC_Transmit_FS(usbTxBuffer, usbTxBufferLen);
-  osDelay(1000); // 每1秒发送一次
+    uint8_t result = SendBatchData();
+
+    if (result == USBD_OK) {
+        /* 发送成功，每2秒发送一批数据 */
+        osDelay(2000);
+    } else {
+        /* 发送失败，等待较短时间后重试 */
+        osDelay(100);
+    }
 }
 
 /**
@@ -70,11 +153,18 @@ void UsbTask_Implementation(void *argument)
 }
 
 /**
- * @brief 初始化USB处理器（现在只是一个空函数）
+ * @brief 初始化USB处理器
  */
 void USBHandler_Init(void)
 {
-  // 不需要任何初始化，保留函数以避免编译错误
+    /* USB处理器初始化 */
+    /* 这里可以添加USB相关的初始化逻辑，比如：
+     * - 初始化USB状态标志
+     * - 准备数据缓冲区
+     * - 设置USB回调函数
+     */
+
+    /* 目前不需要额外的初始化，USB设备已在MX_USB_DEVICE_Init()中初始化 */
 }
 
 /**

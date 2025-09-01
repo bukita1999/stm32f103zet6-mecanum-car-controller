@@ -260,8 +260,7 @@ void StartDefaultTask(void *argument)
   /* init code for USB_DEVICE */
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN StartDefaultTask */
-  /* init code for USB_DEVICE */
-  MX_USB_DEVICE_Init();
+  /* USB设备已在上面初始化，这里不需要重复初始化 */
   /* Infinite loop */
   for (;;)
   {
