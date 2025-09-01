@@ -56,9 +56,16 @@ SystemState_t systemState;
 TickType_t motorControlLastWake;
 uint32_t motorControlPeriod_ms;
 
-/* USER CODE END Variables */
 
-/* USER CODE BEGIN RTOS_THREAD_VARS */
+void MotorControlTask_Init(void *argument);
+void MotorControlTask_Loop(void);
+void CommunicationTask_Init(void *argument);
+void CommunicationTask_Loop(void);
+void MonitorTask_Init(void *argument);
+void MonitorTask_Loop(void);
+void UsbTask_Init(void *argument);
+void UsbTask_Loop(void);
+/* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
@@ -94,9 +101,6 @@ const osThreadAttr_t UsbTxRxTask_attributes = {
   .stack_size = 384 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* USER CODE END RTOS_THREAD_VARS */
-
-/* USER CODE BEGIN RTOS_RESOURCES_VARS */
 /* Definitions for commandQueue */
 osMessageQueueId_t commandQueueHandle;
 const osMessageQueueAttr_t commandQueue_attributes = {
@@ -127,50 +131,35 @@ osEventFlagsId_t systemEventGroupHandle;
 const osEventFlagsAttr_t systemEventGroup_attributes = {
   .name = "systemEventGroup"
 };
-/* USER CODE END RTOS_RESOURCES_VARS */
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
 /* USER CODE END FunctionPrototypes */
 
-/* USER CODE BEGIN RTOS_FUNCTION_PROTOTYPES */
-/* Task function prototypes - implementations are in respective modules */
 void StartDefaultTask(void *argument);
-void StartMotorControlTask(void *argument);    /* motor_control.c */
-void StartCommunicationTask(void *argument);   /* communication.c */
-void StartMonitorTask(void *argument);         /* monitor.c */
-void StartUsbTask(void *argument);             /* usb_handler.c */
-
-/* Internal implementation function prototypes */
-void MotorControlTask_Init(void *argument);
-void MotorControlTask_Loop(void);
-void CommunicationTask_Init(void *argument);
-void CommunicationTask_Loop(void);
-void MonitorTask_Init(void *argument);
-void MonitorTask_Loop(void);
-void UsbTask_Init(void *argument);
-void UsbTask_Loop(void);
-/* USER CODE END RTOS_FUNCTION_PROTOTYPES */
+void StartMotorControlTask(void *argument);
+void StartCommunicationTask(void *argument);
+void StartMonitorTask(void *argument);
+void StartUsbTask(void *argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
-/* USER CODE BEGIN RTOS_HOOK_PROTOTYPES */
 /* Hook prototypes */
 void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName);
 void vApplicationMallocFailedHook(void);
-/* USER CODE END RTOS_HOOK_PROTOTYPES */
 
-/* USER CODE BEGIN RTOS_HOOK_IMPL */
-/* Hook function implementations */
+/* USER CODE BEGIN 4 */
 void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
 {
    /* Run time stack overflow checking is performed if
    configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
    called if a stack overflow is detected. */
 }
+/* USER CODE END 4 */
 
+/* USER CODE BEGIN 5 */
 void vApplicationMallocFailedHook(void)
 {
    /* vApplicationMallocFailedHook() will only be called if
@@ -184,7 +173,7 @@ void vApplicationMallocFailedHook(void)
    to query the size of free heap space that remains (although it does not
    provide information on how the remaining heap might be fragmented). */
 }
-/* USER CODE END RTOS_HOOK_IMPL */
+/* USER CODE END 5 */
 
 /**
   * @brief  FreeRTOS initialization
@@ -195,8 +184,6 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
-
-  /* USER CODE BEGIN RTOS_RESOURCES_INIT */
   /* Create the mutex(es) */
   /* creation of motorDataMutex */
   motorDataMutexHandle = osMutexNew(&motorDataMutex_attributes);
@@ -207,18 +194,13 @@ void MX_FREERTOS_Init(void) {
   /* creation of i2cMutex */
   i2cMutexHandle = osMutexNew(&i2cMutex_attributes);
 
-  /* Create the semaphores(s) */
-  /* creation of statusSemaphore */
-  statusSemaphoreHandle = osSemaphoreNew(1, 1, &statusSemaphore_attributes);
-
-  /* Create the queue(s) */
-  /* creation of commandQueue */
-  commandQueueHandle = osMessageQueueNew (16, sizeof(uint16_t), &commandQueue_attributes);
-  /* USER CODE END RTOS_RESOURCES_INIT */
-
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
+
+  /* Create the semaphores(s) */
+  /* creation of statusSemaphore */
+  statusSemaphoreHandle = osSemaphoreNew(1, 1, &statusSemaphore_attributes);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
@@ -228,11 +210,14 @@ void MX_FREERTOS_Init(void) {
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
+  /* Create the queue(s) */
+  /* creation of commandQueue */
+  commandQueueHandle = osMessageQueueNew (16, sizeof(uint16_t), &commandQueue_attributes);
+
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
-  /* USER CODE BEGIN RTOS_THREADS_INIT */
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
@@ -249,14 +234,13 @@ void MX_FREERTOS_Init(void) {
   /* creation of UsbTxRxTask */
   UsbTxRxTaskHandle = osThreadNew(StartUsbTask, NULL, &UsbTxRxTask_attributes);
 
-  /* creation of systemEventGroup */
-  systemEventGroupHandle = osEventFlagsNew(&systemEventGroup_attributes);
-  /* USER CODE END RTOS_THREADS_INIT */
-
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   USBHandler_Init();
   /* USER CODE END RTOS_THREADS */
+
+  /* creation of systemEventGroup */
+  systemEventGroupHandle = osEventFlagsNew(&systemEventGroup_attributes);
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
@@ -273,6 +257,8 @@ void MX_FREERTOS_Init(void) {
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
+  /* init code for USB_DEVICE */
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN StartDefaultTask */
   /* init code for USB_DEVICE */
   MX_USB_DEVICE_Init();
