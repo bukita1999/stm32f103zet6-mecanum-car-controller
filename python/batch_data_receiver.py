@@ -19,14 +19,14 @@ import zlib  # 用于CRC32校验
 class STM32BatchDataReceiver:
     """STM32批量数据接收器"""
 
-    def __init__(self, port='COM11', baudrate=115200, timeout=1.0):
+    def __init__(self, port='COM4', baudrate=115200, timeout=0.1):
         """
         初始化接收器
 
         Args:
             port: 串口端口号
             baudrate: 波特率
-            timeout: 读取超时时间
+            timeout: 读取超时时间 (调整为0.1s以适应100ms发送间隔)
         """
         self.port = port
         self.baudrate = baudrate
@@ -36,7 +36,7 @@ class STM32BatchDataReceiver:
         self.csv_file = None
 
         # 数据结构定义（与STM32端保持一致）
-        self.BATCH_SIZE = 100
+        self.BATCH_SIZE = 10
         self.FRAME_END = b'\x00'  # COBS帧结束符
 
         # TLV类型定义
@@ -135,7 +135,7 @@ class STM32BatchDataReceiver:
             data_offset = 8  # 包头大小
 
             for i in range(min(data_count, self.BATCH_SIZE)):
-                if data_offset + 32 > len(data):  # 每组数据32字节
+                if data_offset + 36 > len(data):  # 每组数据36字节
                     print(f"数据{i}长度不足")
                     break
 
@@ -310,8 +310,8 @@ class STM32BatchDataReceiver:
                     # 查找下一个帧
                     frame_end = buffer.find(self.FRAME_END)
 
-                # 避免CPU占用过高
-                time.sleep(0.01)
+                # 调整延时以适应100ms发送间隔
+                time.sleep(0.005)  # 5ms延时，减少CPU占用同时保持响应性
 
         except KeyboardInterrupt:
             print("\n用户中断接收")

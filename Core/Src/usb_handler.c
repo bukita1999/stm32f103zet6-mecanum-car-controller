@@ -37,7 +37,7 @@
  * @retval None
  */
 /* USB任务的上下文变量 */
-#define BATCH_SIZE          100     /* 每批发送100组数据 */
+#define BATCH_SIZE          10      /* 每批发送10组数据 */
 #define BATCH_DATA_SIZE     (sizeof(BatchHeader_t) + BATCH_SIZE * sizeof(BatchData_t))
 #define TLV_BUFFER_SIZE     (BATCH_DATA_SIZE + 10)  /* TLV数据缓冲区 */
 #define FRAME_BUFFER_SIZE   (TLV_BUFFER_SIZE + CRC32_SIZE + COBS_OVERHEAD + 10)
@@ -133,11 +133,11 @@ void UsbTask_Loop(void)
     uint8_t result = SendBatchData();
 
     if (result == USBD_OK) {
-        /* 发送成功，每2秒发送一批数据 */
-        osDelay(2000);
+        /* 发送成功，每100ms发送一批数据 */
+        osDelay(100);
     } else {
         /* 发送失败，等待较短时间后重试 */
-        osDelay(100);
+        osDelay(50);
     }
 }
 
