@@ -143,12 +143,6 @@ void StartMonitorTask(void *argument);         /* monitor.c */
 void StartUsbTask(void *argument);             /* usb_handler.c */
 
 /* Internal implementation function prototypes */
-void MotorControlTask_Implementation(void *argument);
-void CommunicationTask_Implementation(void *argument);
-void MonitorTask_Implementation(void *argument);
-void UsbTask_Implementation(void *argument);
-
-/* Task initialization and loop function prototypes */
 void MotorControlTask_Init(void *argument);
 void MotorControlTask_Loop(void);
 void CommunicationTask_Init(void *argument);
