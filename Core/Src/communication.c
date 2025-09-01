@@ -36,6 +36,11 @@ char uartTxBuffer[128];
 uint8_t rxBuffer[64];
 uint8_t rxIndex = 0;
 
+/* 用于存储完整命令的缓冲区 */
+uint8_t commandBuffer[64];
+uint8_t commandLength = 0;
+volatile uint8_t commandReady = 0;
+
 /* Private function prototypes -----------------------------------------------*/
 
 /**
@@ -50,10 +55,14 @@ void CommunicationTask_Init(void *argument)
   /* 初始化接收 */
   rxIndex = 0;
   memset(rxBuffer, 0, sizeof(rxBuffer));
-  HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
-
+  
+  /* 启动UART中断接收 */
+  HAL_StatusTypeDef status = HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+  
   /* 提示信息 */
-  HAL_UART_Transmit(&huart1, (uint8_t *)"Communication task started\r\n", 28, 100);
+  char initMsg[64];
+  int len = sprintf(initMsg, "Communication task started, UART status: %d\r\n", status);
+  HAL_UART_Transmit(&huart1, (uint8_t *)initMsg, len, 100);
 }
 
 /**
@@ -62,6 +71,9 @@ void CommunicationTask_Init(void *argument)
  */
 void CommunicationTask_Loop(void)
 {
+  /* 用于UART发送的长度变量 */
+  int len = 0;
+
   /* 优先处理通信事件，提高响应速度 */
   uint32_t eventFlag = osEventFlagsWait(systemEventGroupHandle,
                                         EVENT_COMMUNICATION,
@@ -69,28 +81,46 @@ void CommunicationTask_Loop(void)
                                         10); // 减少等待时间
 
   /* 处理接收到的命令 */
-  if ((eventFlag & EVENT_COMMUNICATION) == EVENT_COMMUNICATION)
+  if ((eventFlag & EVENT_COMMUNICATION) == EVENT_COMMUNICATION && commandReady)
   {
-    /* 保证字符串结束 */
-    rxBuffer[rxIndex] = '\0';
+    /* 使用命令缓冲区而不是接收缓冲区 */
+    commandBuffer[commandLength] = '\0';
 
     /* 只有接收到完整命令(#结尾)才处理 */
-    if (rxIndex >= 1 && rxBuffer[rxIndex-1] == '#')
+    if (commandLength >= 1 && commandBuffer[commandLength-1] == '#')
     {
       /* 清除结束符，便于后续处理 */
-      rxBuffer[rxIndex-1] = '\0';
+      commandBuffer[commandLength-1] = '\0';
 
+      /* 输出命令处理开始的调试信息 */
+      len = sprintf(uartTxBuffer, "PROCESS_CMD: Len=%d, Cmd=[%.*s]\r\n",
+                   commandLength, commandLength-1, commandBuffer);
+      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
+
+      /* 详细检查前5个字符 */
+      len = sprintf(uartTxBuffer, "CHECK_CHARS: [%c][%c][%c][%c][%c] (ASCII: %d,%d,%d,%d,%d)\r\n",
+                   commandBuffer[0], commandBuffer[1], commandBuffer[2], commandBuffer[3], commandBuffer[4],
+                   (int)commandBuffer[0], (int)commandBuffer[1], (int)commandBuffer[2],
+                   (int)commandBuffer[3], (int)commandBuffer[4]);
+      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
+
+      /* 检查命令长度是否足够 */
+      if (commandLength < 6)
+      {
+        len = sprintf(uartTxBuffer, "ERR,COMMAND_TOO_SHORT,LEN=%d\r\n", commandLength);
+        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
+      }
       /* 处理电机速度命令 */
-      if (rxBuffer[0] == '$' && rxBuffer[1] == 'S' && rxBuffer[2] == 'P' &&
-          rxBuffer[3] == 'D' && rxBuffer[4] == ',')
+      else if (commandBuffer[0] == '$' && commandBuffer[1] == 'S' && commandBuffer[2] == 'P' &&
+               commandBuffer[3] == 'D' && commandBuffer[4] == ',')
       {
         /* 输出接收到的命令用于调试 */
-        int len = sprintf(uartTxBuffer, "Received: %s#\r\n", rxBuffer);
+        len = sprintf(uartTxBuffer, "SPD_COMMAND_MATCHED! Processing...\r\n");
         HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
 
         /* 创建一个工作字符串副本用于解析，避免破坏原始数据 */
         char workBuffer[64];
-        strcpy(workBuffer, (char *)&rxBuffer[5]);
+        strcpy(workBuffer, (char *)&commandBuffer[5]);
 
         /* 先解析所有参数，存储到临时数组 */
         int16_t speeds[4] = {0};
@@ -142,15 +172,15 @@ void CommunicationTask_Loop(void)
         }
       }
       /* 处理PID参数设置命令 */
-      else if (rxBuffer[0] == '$' && rxBuffer[1] == 'P' && rxBuffer[2] == 'I' &&
-               rxBuffer[3] == 'D' && rxBuffer[4] == ',')
+      else if (commandBuffer[0] == '$' && commandBuffer[1] == 'P' && commandBuffer[2] == 'I' &&
+               commandBuffer[3] == 'D' && commandBuffer[4] == ',')
       {
         /* 输出接收到的命令用于调试 */
-        int len = sprintf(uartTxBuffer, "Received PID: %s#\r\n", rxBuffer);
+        len = sprintf(uartTxBuffer, "Received PID[%d]: %s\r\n", commandLength, commandBuffer);
         HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
 
         /* 解析PID参数 */
-        char *motorIdStr = strtok((char *)&rxBuffer[5], ",");
+        char *motorIdStr = strtok((char *)&commandBuffer[5], ",");
         char *kpStr = strtok(NULL, ",");
         char *kiStr = strtok(NULL, ",");
         char *kdStr = strtok(NULL, ",");
@@ -204,17 +234,41 @@ void CommunicationTask_Loop(void)
           HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 100);
         }
       }
+      else
+      {
+        /* 未知命令格式 */
+        len = sprintf(uartTxBuffer, "ERR,UNKNOWN_COMMAND\r\n");
+        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
+      }
     }
 
-    /* 命令处理完成，清除缓冲区并重启接收 */
-    memset(rxBuffer, 0, sizeof(rxBuffer));
-    rxIndex = 0;
-    HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+    /* 命令处理完成，清除命令状态 */
+    commandReady = 0;
+    commandLength = 0;
+    memset(commandBuffer, 0, sizeof(commandBuffer));
+
+    /* 输出命令处理完成的确认信息 */
+    len = sprintf(uartTxBuffer, "CMD_CLEANUP: Buffer cleared, ready for next command\r\n");
+    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
   }
   else
   {
-    /* 没有通信事件时，短暂延时避免CPU占用过高 */
-    osDelay(5);
+    /* 没有通信事件时，确保UART接收始终处于激活状态 */
+    if (huart1.RxState != HAL_UART_STATE_BUSY_RX)
+    {
+      /* UART接收未激活，重新启动接收 */
+      HAL_StatusTypeDef status = HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+
+      /* 输出UART状态用于调试 */
+      if (status != HAL_OK)
+      {
+        len = sprintf(uartTxBuffer, "UART Restart Error: %d, State: %d\r\n",
+                     (int)status, (int)huart1.RxState);
+        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, len, 20);
+      }
+    }
+    /* 短暂延时避免CPU占用过高，但要足够短以保证响应性 */
+    osDelay(1);
   }
 }
 
@@ -236,14 +290,50 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART1)
   {
+    /* 忽略回车符和换行符 */
+    if (rxBuffer[rxIndex] == '\r' || rxBuffer[rxIndex] == '\n')
+    {
+      /* 忽略这个字符，直接继续接收下一个字符 */
+      HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+      return;
+    }
+
     /* 更新索引 */
     rxIndex++;
-    
+
     /* 检查是否收到结束符'#'或缓冲区将满 */
     if (rxBuffer[rxIndex-1] == '#' || rxIndex >= sizeof(rxBuffer) - 2)
     {
-      /* 设置事件标志，通知任务处理命令 */
-      osEventFlagsSet(systemEventGroupHandle, EVENT_COMMUNICATION);
+      /* 接收到完整命令 - 立即处理并清空缓冲区 */
+
+      /* 复制完整命令到命令缓冲区 */
+      if (rxIndex <= sizeof(commandBuffer))
+      {
+        memcpy(commandBuffer, rxBuffer, rxIndex);
+        commandLength = rxIndex;
+        commandReady = 1;
+
+        /* 设置事件标志，通知任务处理命令 */
+        osEventFlagsSet(systemEventGroupHandle, EVENT_COMMUNICATION);
+
+        /* 调试信息：显示接收到的完整命令 */
+        int debugLen = sprintf(uartTxBuffer, "RECV_CMD: [%.*s]\r\n", rxIndex-1, rxBuffer);
+        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, debugLen, 20);
+      }
+
+      /* 立即清空接收缓冲区，确保下一次接收干净 */
+      memset(rxBuffer, 0, sizeof(rxBuffer));
+      rxIndex = 0;
+
+      /* 重新启动UART接收，为下一次命令做准备 */
+      HAL_StatusTypeDef status = HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+
+      /* 如果UART重启失败，输出错误信息 */
+      if (status != HAL_OK)
+      {
+        int errorLen = sprintf(uartTxBuffer, "UART_RESTART_FAIL: %d\r\n", (int)status);
+        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, errorLen, 20);
+      }
     }
     else
     {

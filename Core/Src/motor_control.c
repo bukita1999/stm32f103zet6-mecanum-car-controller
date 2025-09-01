@@ -37,8 +37,7 @@ static float g_motorSpeedFilt[4] = {0};
 /* I2C 输出节流（跟踪上次写入的原始 0~4095 PWM 值） */
 static uint16_t g_lastPwmRaw[4] = {0};
 
-/* PWM调试输出节流（避免输出过于频繁） */
-static uint32_t g_lastPwmDebugTime[4] = {0};
+/* PWM调试输出节流已移除（避免输出过于频繁） */
 
 /* 用于UART发送的缓冲区 */
 extern char uartTxBuffer[128];
@@ -216,36 +215,15 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
       if (pwmStatus == HAL_OK) {
         g_lastPwmRaw[motor->id] = pwmValue;
 
-        /* 调试输出：PWM设置成功 - 节流控制，避免输出过于频繁 */
-        uint32_t currentTime = osKernelGetTickCount();
-        if ((currentTime - g_lastPwmDebugTime[motor->id]) > 1000) {  // 1秒输出一次
-          g_lastPwmDebugTime[motor->id] = currentTime;
-
-          char debugBuffer[48];
-          if (pwmValue == 0) {
-            snprintf(debugBuffer, sizeof(debugBuffer), "[PWM%d停止] 通道%d: 0/4095 (0%%)\r\n",
-                    motor->id, motor->pwmChannel);
-          } else {
-            uint8_t pwmPercent = (uint8_t)((pwmValue * 100) / 4095);
-            snprintf(debugBuffer, sizeof(debugBuffer), "[PWM%d] 通道%d: %d/4095 (%d%%)\r\n",
-                    motor->id, motor->pwmChannel, pwmValue, pwmPercent);
-          }
-          HAL_UART_Transmit(&huart1, (uint8_t *)debugBuffer, strlen(debugBuffer), 20);
-        }
+        /* PWM调试输出已移除 - 避免I2C通信时的USART干扰 */
       } else {
         systemState.systemFlags.pca9685Error = 1;
 
-        /* 错误信息立即输出，不节流 */
-        char errorBuffer[64];
-        snprintf(errorBuffer, sizeof(errorBuffer), "[PWM%d错误] 通道%d 设置失败 (err=%d)\r\n",
-                motor->id, motor->pwmChannel, pwmStatus);
-        HAL_UART_Transmit(&huart1, (uint8_t *)errorBuffer, strlen(errorBuffer), 20);
+        /* PWM错误输出已移除 - 避免I2C通信时的USART干扰 */
       }
       osMutexRelease(i2cMutexHandle);
     } else {
-      char mutexBuffer[32];
-      snprintf(mutexBuffer, sizeof(mutexBuffer), "[I2C忙] 无法设置PWM%d\r\n", motor->id);
-      HAL_UART_Transmit(&huart1, (uint8_t *)mutexBuffer, strlen(mutexBuffer), 20);
+      /* I2C忙时输出已移除 - 避免通信冲突 */
     }
   }
 }
@@ -261,96 +239,33 @@ void MotorSystemInit(void)
   /* 初始化PCA9685 */
   if (osMutexAcquire(i2cMutexHandle, 100) == osOK)
   {
-    /* 输出I2C连接检查开始信息 */
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "\r\n=== I2C连接检查开始 ===\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "I2C1配置:\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "- 时钟速度: 100kHz\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "- SCL引脚: PB6, SDA引脚: PB7\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "- 地址模式: 7位\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-
-    /* 首先检查I2C设备是否存在 */
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "正在扫描I2C总线上的PCA9685设备...\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+    /* I2C连接检查输出已移除 - 避免通信冲突 */
 
     HAL_StatusTypeDef deviceCheck = HAL_I2C_IsDeviceReady(&hi2c1, PCA9685_I2C_ADDR << 1, 3, 100);
     if (deviceCheck == HAL_OK) {
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "✓ PCA9685设备检测成功!\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 设备地址: 0x%02X (7位)\r\n", PCA9685_I2C_ADDR);
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 写入地址: 0x%02X (8位)\r\n", PCA9685_I2C_ADDR << 1);
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-
       /* 尝试读取设备ID */
       uint8_t mode1_reg;
-      HAL_StatusTypeDef readStatus = PCA9685_ReadRegister(&hi2c1, PCA9685_MODE1, &mode1_reg);
-      if (readStatus == HAL_OK) {
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - MODE1寄存器读取成功: 0x%02X\r\n", mode1_reg);
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      } else {
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - MODE1寄存器读取失败 (err=%d)\r\n", readStatus);
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      }
-
-      /* 初始化PCA9685 */
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "正在初始化PCA9685...\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+      PCA9685_ReadRegister(&hi2c1, PCA9685_MODE1, &mode1_reg); /* 读取但不检查返回值 */
+      /* PCA9685检测成功输出已移除 */
 
       if (PCA9685_Init(&hi2c1) != HAL_OK)
       {
         systemState.systemFlags.pca9685Error = 1;
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "✗ PCA9685初始化失败!\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  可能原因:\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - I2C通信错误\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - PCA9685供电不足\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 晶振未连接或损坏\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+        /* PCA9685初始化失败输出已移除 */
       } else {
         systemState.systemFlags.pca9685Error = 0;
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "✓ PCA9685初始化成功!\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - PWM频率设置为50Hz\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 16个PWM通道已配置\r\n");
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+        /* PCA9685初始化成功输出已移除 */
       }
     } else {
       systemState.systemFlags.pca9685Error = 1;
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "✗ PCA9685设备未检测到!\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 设备地址: 0x%02X\r\n", PCA9685_I2C_ADDR);
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 错误代码: %d\r\n", deviceCheck);
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  可能原因:\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - PCA9685未上电或电源不足\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - I2C线缆连接错误(SCL/SDA)\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 地址冲突或其他I2C设备占用\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  - 上拉电阻缺失或阻值不当\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+      /* PCA9685设备未检测到输出已移除 */
     }
 
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "=== I2C连接检查结束 ===\r\n\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+    /* I2C连接检查结束输出已移除 */
 
     osMutexRelease(i2cMutexHandle);
   } else {
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "I2C互斥量获取失败，无法进行连接检查\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+    /* I2C互斥量获取失败输出已移除 */
   }
 
   /* 初始化四个电机 - 使用两个方向引脚 */
@@ -409,54 +324,9 @@ void MotorControlTask_Init(void *argument)
     }
   }
 
-  /* 输出调试信息 */
-  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor control task started (fixed %lums cycle)\r\n", motorControlPeriod_ms);
-  HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+  /* 电机控制任务调试输出已移除 - 避免I2C通信干扰 */
 
-  /* 测试PWM输出：逐步增加PWM值 */
-  osDelay(3000); // 等待3秒让用户准备
-  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "\r\n=== PWM信号测试开始 ===\r\n");
-  HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-
-  if (systemState.systemFlags.pca9685Error == 0) {
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "PCA9685正常，开始PWM测试\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-
-    for (uint8_t testPwm = 10; testPwm <= 50; testPwm += 10) {
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "设置PWM值为: %d%%\r\n", testPwm);
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-
-      for (uint8_t motorId = 0; motorId < 4; motorId++) {
-        SetMotorPWMPercentage(&systemState.motors[motorId], testPwm);
-        snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  电机%d PWM设置完成\r\n", motorId);
-        HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-        osDelay(200);
-      }
-
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "请用示波器检查通道0-3的PWM信号\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      osDelay(1000); // 给用户1秒时间检查示波器
-    }
-
-    /* 停止所有电机 */
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "停止所有电机...\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-    for (uint8_t motorId = 0; motorId < 4; motorId++) {
-      SetMotorPWMPercentage(&systemState.motors[motorId], 0);
-      snprintf(uartTxBuffer, sizeof(uartTxBuffer), "  电机%d已停止\r\n", motorId);
-      HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      osDelay(100);
-    }
-
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "✓ PWM测试完成\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-  } else {
-    snprintf(uartTxBuffer, sizeof(uartTxBuffer), "✗ PCA9685错误，跳过PWM测试\r\n");
-    HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-  }
-
-  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "=== PWM信号测试结束 ===\r\n\r\n");
-  HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+  /* PWM测试输出已移除 - 避免I2C通信干扰 */
 }
 
 /**
