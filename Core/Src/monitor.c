@@ -61,8 +61,8 @@ void MonitorTask_Loop(void)
 {
   uint32_t currentTime = osKernelGetTickCount();
 
-  /* 每5秒报告一次电机状态 */
-  if ((currentTime - monitorLastReportTime) > 5000)
+  /* 每半秒报告一次电机状态 */
+  if ((currentTime - monitorLastReportTime) > 500)
   {
     monitorLastReportTime = currentTime;
 
@@ -100,6 +100,15 @@ void MonitorTask_Loop(void)
       /* 如果最后一次没有释放，这里释放 */
       // osMutexRelease(motorDataMutexHandle); // 已在循环中释放
     }
+
+    /* 报告系统状态 */
+    char statusBuffer[64];
+    snprintf(statusBuffer, sizeof(statusBuffer),
+             "System: Init=%d, PCA9685=%d, MotorErr=%d\r\n",
+             systemState.systemFlags.initialized,
+             systemState.systemFlags.pca9685Error,
+             systemState.systemFlags.motorError);
+    HAL_UART_Transmit(&huart1, (uint8_t *)statusBuffer, strlen(statusBuffer), 100);
 
     /* 可以添加其他系统参数监控，如温度、电压等 */
   }
