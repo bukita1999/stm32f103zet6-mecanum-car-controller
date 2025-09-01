@@ -205,7 +205,9 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
   }
 
   /* 转换为PCA9685的PWM值 (0-4095) */
-  uint16_t pwmValue = (uint16_t)((motor->pwmPercent * 4095) / 100);
+  /* 使用32位临时变量避免整数溢出：uint8_t(255) * 4095 = 1,044,225 > uint16_t最大值 */
+  uint32_t temp = (uint32_t)motor->pwmPercent * 4095UL;
+  uint16_t pwmValue = (uint16_t)(temp / 100U);
   
   /* I2C节流：只在值变化时才写入 */
   if (g_lastPwmRaw[motor->id] != pwmValue) {
@@ -216,7 +218,7 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
 
         /* 调试输出：PWM设置成功 - 节流控制，避免输出过于频繁 */
         uint32_t currentTime = osKernelGetTickCount();
-        if ((currentTime - g_lastPwmDebugTime[motor->id]) > 500) {  // 半秒输出一次
+        if ((currentTime - g_lastPwmDebugTime[motor->id]) > 1000) {  // 1秒输出一次
           g_lastPwmDebugTime[motor->id] = currentTime;
 
           char debugBuffer[48];
@@ -234,7 +236,7 @@ void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent)
         systemState.systemFlags.pca9685Error = 1;
 
         /* 错误信息立即输出，不节流 */
-        char errorBuffer[48];
+        char errorBuffer[64];
         snprintf(errorBuffer, sizeof(errorBuffer), "[PWM%d错误] 通道%d 设置失败 (err=%d)\r\n",
                 motor->id, motor->pwmChannel, pwmStatus);
         HAL_UART_Transmit(&huart1, (uint8_t *)errorBuffer, strlen(errorBuffer), 20);
@@ -412,7 +414,7 @@ void MotorControlTask_Init(void *argument)
   HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
 
   /* 测试PWM输出：逐步增加PWM值 */
-  osDelay(2000); // 等待2秒让用户准备，减少等待时间
+  osDelay(3000); // 等待3秒让用户准备
   snprintf(uartTxBuffer, sizeof(uartTxBuffer), "\r\n=== PWM信号测试开始 ===\r\n");
   HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
 
@@ -433,7 +435,7 @@ void MotorControlTask_Init(void *argument)
 
       snprintf(uartTxBuffer, sizeof(uartTxBuffer), "请用示波器检查通道0-3的PWM信号\r\n");
       HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
-      osDelay(500); // 给用户半秒时间检查示波器
+      osDelay(1000); // 给用户1秒时间检查示波器
     }
 
     /* 停止所有电机 */
@@ -485,7 +487,8 @@ void MotorControlTask_Loop(void)
       float pidOut = PIDCompute(&systemState.motors[i].pidController, motorControlDt_s);
 
       /* 5) 直接用控制量决定方向与占空比（不再额外翻转号） */
-      SetMotorPWMPercentage(&systemState.motors[i], (int16_t)pidOut);
+      /* 使用四舍五入避免精度损失 */
+      SetMotorPWMPercentage(&systemState.motors[i], (int16_t)(pidOut + (pidOut >= 0 ? 0.5f : -0.5f)));
     }
 
     /* 释放电机数据互斥量 */

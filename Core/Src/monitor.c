@@ -61,8 +61,8 @@ void MonitorTask_Loop(void)
 {
   uint32_t currentTime = osKernelGetTickCount();
 
-  /* 每半秒报告一次电机状态 */
-  if ((currentTime - monitorLastReportTime) > 500)
+  /* 每1秒报告一次电机状态 */
+  if ((currentTime - monitorLastReportTime) > 1000)
   {
     monitorLastReportTime = currentTime;
 
@@ -115,8 +115,8 @@ void MonitorTask_Loop(void)
 
   /* USB CDC已经通过定时任务发送Hello World消息 */
 
-  /* 监控任务周期 */
-  osDelay(100);
+  /* 监控任务周期 - 调整为1秒检查一次，但状态报告是1秒一次 */
+  osDelay(1000);
 }
 
 /**
