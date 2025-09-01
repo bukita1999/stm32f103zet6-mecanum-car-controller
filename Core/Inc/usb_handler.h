@@ -35,7 +35,9 @@ extern "C" {
 /* Exported variables --------------------------------------------------------*/
 
 /* Exported functions prototypes ---------------------------------------------*/
-void StartTask05(void *argument);
+void UsbTask_Init(void *argument);
+void UsbTask_Loop(void);
+void UsbTask_Implementation(void *argument);
 void USBHandler_Init(void);
 
 #ifdef __cplusplus

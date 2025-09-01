@@ -104,10 +104,6 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM5_Init();
   MX_CRC_Init();
-  
-  /* 关键修复：在main中初始化USB，不要延迟 */
-  MX_USB_DEVICE_Init();
-  
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */

@@ -255,20 +255,25 @@ void MotorSystemInit(void)
   systemState.systemFlags.initialized = 1;
 }
 
+/* 电机控制任务的上下文变量（现在在freertos.c中定义） */
+extern TickType_t motorControlLastWake;
+extern uint32_t motorControlPeriod_ms;
+static float motorControlDt_s;
+
 /**
- * @brief 电机控制任务函数
+ * @brief 电机控制任务初始化函数
  * @param argument: 未使用
  * @retval None
  */
-void StartMotorControlTask(void *argument)
+void MotorControlTask_Init(void *argument)
 {
   /* 系统初始化 */
   MotorSystemInit();
 
   /* 严格等周期调度准备 */
-  TickType_t lastWake = xTaskGetTickCount();
-  const uint32_t period_ms = MOTOR_CONTROL_PERIOD;      // 例如 10
-  const float dt_s = period_ms / 1000.0f;
+  motorControlLastWake = xTaskGetTickCount();
+  motorControlPeriod_ms = MOTOR_CONTROL_PERIOD;      // 例如 10
+  motorControlDt_s = motorControlPeriod_ms / 1000.0f;
 
   /* 初始化所有电机的目标速度和PID参数 */
   for (uint8_t i = 0; i < 4; i++)
@@ -287,50 +292,61 @@ void StartMotorControlTask(void *argument)
   }
 
   /* 输出调试信息 */
-  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor control task started (fixed %lums cycle)\r\n", period_ms);
+  snprintf(uartTxBuffer, sizeof(uartTxBuffer), "Motor control task started (fixed %lums cycle)\r\n", motorControlPeriod_ms);
   HAL_UART_Transmit(&huart1, (uint8_t *)uartTxBuffer, strlen(uartTxBuffer), 100);
+}
 
-  /* 无限循环 */
-  for (;;)
+/**
+ * @brief 电机控制任务主循环函数
+ * @retval None
+ */
+void MotorControlTask_Loop(void)
+{
+  /* 一次性获取互斥量处理所有电机，减少竞争 */
+  if (osMutexAcquire(motorDataMutexHandle, 5) == osOK)
   {
-    /* 一次性获取互斥量处理所有电机，减少竞争 */
-    if (osMutexAcquire(motorDataMutexHandle, 5) == osOK)
+    /* 处理每个电机 */
+    for (uint8_t i = 0; i < 4; i++)
     {
-      /* 处理每个电机 */
-      for (uint8_t i = 0; i < 4; i++)
-      {
-        /* 1) 速度计算（deltaTime 使用固定周期） */
-        CalculateMotorSpeed(&systemState.motors[i], period_ms);
+      /* 1) 速度计算（deltaTime 使用固定周期） */
+      CalculateMotorSpeed(&systemState.motors[i], motorControlPeriod_ms);
 
-        /* 2) 速度小低通（抑制低速量化噪声） */
-        float tau = 0.10f;                             // 100ms 时间常数，先保守
-        float alpha = dt_s / (tau + dt_s);
-        g_motorSpeedFilt[i] += alpha * ((float)systemState.motors[i].currentSpeed - g_motorSpeedFilt[i]);
+      /* 2) 速度小低通（抑制低速量化噪声） */
+      float tau = 0.10f;                             // 100ms 时间常数，先保守
+      float alpha = motorControlDt_s / (tau + motorControlDt_s);
+      g_motorSpeedFilt[i] += alpha * ((float)systemState.motors[i].currentSpeed - g_motorSpeedFilt[i]);
 
-        /* 3) 带符号 PID：测量/目标均用带符号速度 */
-        systemState.motors[i].pidController.currentValue = g_motorSpeedFilt[i];
-        /* targetValue 由 SetMotorSpeed() 设定为带符号，不需要 abs() */
+      /* 3) 带符号 PID：测量/目标均用带符号速度 */
+      systemState.motors[i].pidController.currentValue = g_motorSpeedFilt[i];
+      /* targetValue 由 SetMotorSpeed() 设定为带符号，不需要 abs() */
 
-        /* 4) 计算控制量（已含抗积分饱和与限幅） */
-        float pidOut = PIDCompute(&systemState.motors[i].pidController, dt_s);
+      /* 4) 计算控制量（已含抗积分饱和与限幅） */
+      float pidOut = PIDCompute(&systemState.motors[i].pidController, motorControlDt_s);
 
-        /* 5) 直接用控制量决定方向与占空比（不再额外翻转号） */
-        SetMotorPWMPercentage(&systemState.motors[i], (int16_t)pidOut);
-      }
-      
-      /* 释放电机数据互斥量 */
-      osMutexRelease(motorDataMutexHandle);
-    }
-    else
-    {
-      /* 互斥量获取失败处理 - 偶尔失败是可以接受的 */
-      systemState.systemFlags.motorError = 1;
+      /* 5) 直接用控制量决定方向与占空比（不再额外翻转号） */
+      SetMotorPWMPercentage(&systemState.motors[i], (int16_t)pidOut);
     }
 
-    /* 触发电机数据更新事件 */
-    osEventFlagsSet(systemEventGroupHandle, EVENT_MOTOR_UPDATE);
-
-    /* 等周期延时（消除周期漂移） */
-    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(period_ms));
+    /* 释放电机数据互斥量 */
+    osMutexRelease(motorDataMutexHandle);
   }
+  else
+  {
+    /* 互斥量获取失败处理 - 偶尔失败是可以接受的 */
+    systemState.systemFlags.motorError = 1;
+  }
+
+  /* 触发电机数据更新事件 */
+  osEventFlagsSet(systemEventGroupHandle, EVENT_MOTOR_UPDATE);
+}
+
+/**
+ * @brief 电机控制任务实现函数（由freertos.c中的StartMotorControlTask调用）
+ * @param argument: 未使用
+ * @retval None
+ */
+void MotorControlTask_Implementation(void *argument)
+{
+  /* 此函数现在由 freertos.c 中的 StartMotorControlTask 调用 */
+  /* 不再包含循环逻辑，循环在 freertos.c 中处理 */
 }

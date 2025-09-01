@@ -48,7 +48,9 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint
 int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime);
 void SetMotorSpeed(Motor_t *motor, int16_t speed);
 void SetMotorPWMPercentage(Motor_t *motor, int16_t pwmPercent);
-void StartMotorControlTask(void *argument);
+void MotorControlTask_Init(void *argument);
+void MotorControlTask_Loop(void);
+void MotorControlTask_Implementation(void *argument);
 
 #ifdef __cplusplus
 }

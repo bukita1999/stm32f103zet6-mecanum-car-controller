@@ -40,7 +40,9 @@ extern uint8_t rxBuffer[64];
 extern uint8_t rxIndex;
 
 /* Exported functions prototypes ---------------------------------------------*/
-void StartCommunicationTask(void *argument);
+void CommunicationTask_Init(void *argument);
+void CommunicationTask_Loop(void);
+void CommunicationTask_Implementation(void *argument);
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 
 #ifdef __cplusplus

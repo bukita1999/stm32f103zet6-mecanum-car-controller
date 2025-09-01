@@ -38,7 +38,9 @@ extern "C" {
 /* Exported variables --------------------------------------------------------*/
 
 /* Exported functions prototypes ---------------------------------------------*/
-void StartMonitorTask(void *argument);
+void MonitorTask_Init(void *argument);
+void MonitorTask_Loop(void);
+void MonitorTask_Implementation(void *argument);
 
 #ifdef __cplusplus
 }

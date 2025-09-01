@@ -30,19 +30,43 @@
 /* Private function prototypes -----------------------------------------------*/
 
 /**
- * @brief USB Hello World 定时发送任务
+ * @brief USB任务实现函数（由freertos.c中的StartUsbTask调用）
  * @param argument: 未使用
  * @retval None
  */
-void StartTask05(void *argument)
+/* USB任务的上下文变量 */
+static uint8_t usbTxBuffer[] = "Hello World! From STM32 USB CDC Device To Virtual COM Port\r\n";
+static uint8_t usbTxBufferLen;
+
+/**
+ * @brief USB任务初始化函数
+ * @param argument: 未使用
+ * @retval None
+ */
+void UsbTask_Init(void *argument)
 {
-  uint8_t TxBuffer[] = "Hello World! From STM32 USB CDC Device To Virtual COM Port\r\n";
-  uint8_t TxBufferLen = sizeof(TxBuffer) - 1; // 减去字符串结尾的\0
-  
-  for(;;){
-    CDC_Transmit_FS(TxBuffer, TxBufferLen);
-    osDelay(1000); // 每1秒发送一次
-  }
+  usbTxBufferLen = sizeof(usbTxBuffer) - 1; // 减去字符串结尾的\0
+}
+
+/**
+ * @brief USB任务主循环函数
+ * @retval None
+ */
+void UsbTask_Loop(void)
+{
+  CDC_Transmit_FS(usbTxBuffer, usbTxBufferLen);
+  osDelay(1000); // 每1秒发送一次
+}
+
+/**
+ * @brief USB任务实现函数（由freertos.c中的StartUsbTask调用）
+ * @param argument: 未使用
+ * @retval None
+ */
+void UsbTask_Implementation(void *argument)
+{
+  /* 此函数现在由 freertos.c 中的 StartUsbTask 调用 */
+  /* 不再包含循环逻辑，循环在 freertos.c 中处理 */
 }
 
 /**
