@@ -122,11 +122,13 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
   
   /* 计算编码器变化量 */
   int32_t deltaCount = currentCount - motor->lastEncoderCount;
-  
-  /* 处理编码器溢出 */
-  if (deltaCount > 32768) {
+
+  /* 处理编码器溢出 - STM32 TIM_Encoder模式使用16位计数器 */
+  if (deltaCount > 32767) {
+    /* 向下溢出：计数器从0跳到65535 */
     deltaCount -= 65536;
   } else if (deltaCount < -32768) {
+    /* 向上溢出：计数器从65535跳到0 */
     deltaCount += 65536;
   }
   
@@ -151,6 +153,17 @@ int16_t CalculateMotorSpeed(Motor_t *motor, uint32_t deltaTime)
  */
 void SetMotorSpeed(Motor_t *motor, int16_t speed)
 {
+  /* 限制用户输入的速度范围（基于绝对值） */
+  int16_t abs_speed = abs(speed);
+
+  if (abs_speed > 0 && abs_speed < MOTOR_USER_MIN_RPM) {
+    /* 小于最小值时，根据原方向设为最小值 */
+    speed = (speed > 0) ? MOTOR_USER_MIN_RPM : -MOTOR_USER_MIN_RPM;
+  } else if (abs_speed > MOTOR_USER_MAX_RPM) {
+    /* 大于最大值时，根据原方向设为最大值 */
+    speed = (speed > 0) ? MOTOR_USER_MAX_RPM : -MOTOR_USER_MAX_RPM;
+  }
+
   int16_t prev = motor->targetSpeed;
   motor->targetSpeed = speed;
   motor->pidController.targetValue = (float)speed;

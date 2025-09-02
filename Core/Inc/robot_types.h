@@ -23,6 +23,10 @@ extern "C" {
 #define MOTOR_MAX_RPM    1310     /* 最大RPM值（电机轴，10*131） */
 #define MOTOR_TARGET_RPM 1048     /* 默认目标RPM值（电机轴，8*131） */
 
+/* 用户输入速度限制 - 电机轴转速（减速前）*/
+#define MOTOR_USER_MIN_RPM   100   /* 用户可设置的最小RPM值 */
+#define MOTOR_USER_MAX_RPM   6000  /* 用户可设置的最大RPM值 */
+
 /* === 速度单位与换算建议（新增） === */
 #define SPEED_UNIT_ENC_RPM   1        /* MCU 内部统一使用 RPM */
 #define SPEED_UNIT_STR       "rpm"
@@ -30,11 +34,16 @@ extern "C" {
 /* 编码器计数配置 - 电机轴转速（减速前）*/
 #ifndef ENCODER_TICKS_PER_REV
 /* 这是"定时器实际计数/电机轴机械一转"的 ticks 数：
- * 计算：ENCODER_BASE_PPR * ENCODER_POLE_PAIRS * 4（象限倍频）
- * = 11 * 11 * 4 = 484 ticks/转（电机轴）
+ * 计算：单通道每转脉冲数 * 四倍频倍数
+ * = 11 * 4 = 44 ticks/转（电机轴）
  * 注意：这里测量的是电机轴转速，不包含减速比
+ *
+ * 在10ms采样周期下：
+ * - 60 RPM时：10ms内应产生 44 * 60 * 0.01 ≈ 26.4 个脉冲
+ * - 6000 RPM时：10ms内应产生 44 * 6000 * 0.01 ≈ 2640 个脉冲
+ * - 最大测量范围约为 ±6553 RPM（考虑16位定时器溢出）
  */
-#define ENCODER_TICKS_PER_REV (11 * 11 * 4)  /* 484 ticks per motor shaft revolution */
+#define ENCODER_TICKS_PER_REV (11 * 4)  /* 44 ticks per motor shaft revolution */
 #endif
 
 static inline int32_t enc_delta_to_cps(int32_t delta, uint32_t dt_ms){
@@ -45,7 +54,11 @@ static inline int32_t enc_delta_to_rpm(int32_t delta, uint32_t dt_ms){
   /* delta: 采样周期内的计数增量（带符号） */
   /* 使用64位整数进行计算以避免溢出 */
   /* 返回电机轴转速(RPM，减速前) */
-  int64_t rpm = ((int64_t)delta * 60 * 1000) / ((int64_t)ENCODER_TICKS_PER_REV * dt_ms);
+  /* 公式推导：rpm = (delta / dt_ms) * (1000 / ENCODER_TICKS_PER_REV) * 60 */
+  /*         = delta * 60 * 1000 / (ENCODER_TICKS_PER_REV * dt_ms) */
+  if (dt_ms == 0) return 0;  /* 避免除零错误 */
+
+  int64_t rpm = ((int64_t)delta * 60LL * 1000LL) / ((int64_t)ENCODER_TICKS_PER_REV * dt_ms);
   return (int32_t)rpm;
 }
 static inline float cps_to_rpm(int32_t cps){
