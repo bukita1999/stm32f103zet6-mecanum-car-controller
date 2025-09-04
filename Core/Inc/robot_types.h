@@ -13,15 +13,15 @@ extern "C" {
 
 
 /* 电机PID控制参数 - 针对电机轴转速（减速前）*/
-#define MOTOR_PID_KP     0.2   /* 初始比例系数（针对电机轴转速调整）*/
-#define MOTOR_PID_KI     0.01 /* 初始积分系数（针对电机轴转速调整）*/
+#define MOTOR_PID_KP     0.02   /* 初始比例系数（针对电机轴转速调整）*/
+#define MOTOR_PID_KI     0 /* 初始积分系数（针对电机轴转速调整）*/
 #define MOTOR_PID_KD     0         /* 初始微分系数（针对电机轴转速调整）*/
 #define MOTOR_PID_MIN    -100.0f /* PID输出下限 */
 #define MOTOR_PID_MAX    100.0f  /* PID输出上限 */
 
-/* 电机RPM参数 - 电机轴转速（减速前）*/
-#define MOTOR_MAX_RPM    1310     /* 最大RPM值（电机轴，10*131） */
-#define MOTOR_TARGET_RPM 1048     /* 默认目标RPM值（电机轴，8*131） */
+// /* 电机RPM参数 - 电机轴转速（减速前）*/
+// #define MOTOR_MAX_RPM    1310     /* 最大RPM值（电机轴，10*131） */
+// #define MOTOR_TARGET_RPM 1048     /* 默认目标RPM值（电机轴，8*131） */
 
 /* 用户输入速度限制 - 电机轴转速（减速前）*/
 #define MOTOR_USER_MIN_RPM   100   /* 用户可设置的最小RPM值 */
