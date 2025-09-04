@@ -13,8 +13,8 @@ extern "C" {
 
 
 /* 电机PID控制参数 - 针对电机轴转速（减速前）*/
-#define MOTOR_PID_KP     0.02   /* 初始比例系数（针对电机轴转速调整）*/
-#define MOTOR_PID_KI     0 /* 初始积分系数（针对电机轴转速调整）*/
+#define MOTOR_PID_KP     0.015   /* 初始比例系数（针对电机轴转速调整）*/
+#define MOTOR_PID_KI     0.0025 /* 初始积分系数（针对电机轴转速调整）*/
 #define MOTOR_PID_KD     0         /* 初始微分系数（针对电机轴转速调整）*/
 #define MOTOR_PID_MIN    -100.0f /* PID输出下限 */
 #define MOTOR_PID_MAX    100.0f  /* PID输出上限 */

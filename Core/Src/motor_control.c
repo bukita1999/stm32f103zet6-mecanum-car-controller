@@ -34,6 +34,19 @@
 /* 速度小低通的状态（每路电机一个），初值 0 */
 static float g_motorSpeedFilt[4] = {0};
 
+/**
+ * @brief 获取电机滤波后的速度
+ * @param motorIndex: 电机索引 (0-3)
+ * @return float: 滤波后的速度值
+ */
+float GetMotorFilteredSpeed(uint8_t motorIndex)
+{
+    if (motorIndex < 4) {
+        return g_motorSpeedFilt[motorIndex];
+    }
+    return 0.0f;
+}
+
 /* I2C 输出节流（跟踪上次写入的原始 0~4095 PWM 值） */
 static uint16_t g_lastPwmRaw[4] = {0};
 

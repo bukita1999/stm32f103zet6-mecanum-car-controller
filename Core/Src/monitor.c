@@ -21,6 +21,7 @@
 #include "monitor.h"
 #include "communication.h"
 #include "usart.h"
+#include "motor_control.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,15 +73,24 @@ void MonitorTask_Loop(void)
       /* 报告所有电机状态 */
       for (uint8_t i = 0; i < 4; i++)
       {
-        /* 将浮点错误值转换为整数显示（乘以100保留2位小数精度） */
-        int16_t errorInt = (int16_t)(systemState.motors[i].pidController.error * 100);
+        /* 显示实际速度差值和PID内部误差 */
+        int16_t actualError = systemState.motors[i].targetSpeed - systemState.motors[i].currentSpeed;
+
+        /* PID内部误差（基于滤波速度）- 直接转换为整数 */
+        int16_t pidErrorInt = (int16_t)systemState.motors[i].pidController.error;
+
+        /* 显示滤波后的速度用于调试 */
+        int16_t filteredSpeed = (int16_t)GetMotorFilteredSpeed(i);
+
         snprintf(uartTxBuffer, sizeof(uartTxBuffer),
-                "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%d.%02d\r\n",
+                "Motor%d: Target:%d Current:%d Filtered:%d PWM:%d%%, ActualErr:%d, PID-Err:%d\r\n",
                 i + 1,
                 systemState.motors[i].targetSpeed,
                 systemState.motors[i].currentSpeed,
+                filteredSpeed,  /* 显示滤波后的速度 */
                 systemState.motors[i].pwmPercent,
-                errorInt / 100, abs(errorInt % 100));
+                actualError,  /* 实际误差直接显示整数 */
+                pidErrorInt); /* PID误差也直接显示整数 */
 
         /* 释放互斥量发送期间，避免长时间占用 */
         osMutexRelease(motorDataMutexHandle);
