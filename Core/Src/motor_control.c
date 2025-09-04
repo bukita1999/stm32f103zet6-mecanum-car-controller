@@ -47,6 +47,54 @@ float GetMotorFilteredSpeed(uint8_t motorIndex)
     return 0.0f;
 }
 
+/**
+ * @brief 设置指定电机的PID参数
+ * @param motorIndex: 电机索引 (0-3)
+ * @param kp: 比例系数
+ * @param ki: 积分系数
+ * @param kd: 微分系数
+ */
+void SetMotorPIDParameters(uint8_t motorIndex, float kp, float ki, float kd)
+{
+    if (motorIndex >= 4) return;
+
+    if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
+    {
+        /* 更新PID参数 */
+        systemState.motors[motorIndex].pidController.Kp = kp;
+        systemState.motors[motorIndex].pidController.Ki = ki;
+        systemState.motors[motorIndex].pidController.Kd = kd;
+
+        /* 重置PID积分项以避免突变 */
+        systemState.motors[motorIndex].pidController.errorSum = 0.0f;
+        systemState.motors[motorIndex].pidController.lastError = 0.0f;
+
+        osMutexRelease(motorDataMutexHandle);
+    }
+}
+
+/**
+ * @brief 获取指定电机的PID参数
+ * @param motorIndex: 电机索引 (0-3)
+ * @param kp: 比例系数输出指针
+ * @param ki: 积分系数输出指针
+ * @param kd: 微分系数输出指针
+ */
+void GetMotorPIDParameters(uint8_t motorIndex, float *kp, float *ki, float *kd)
+{
+    if (motorIndex >= 4 || kp == NULL || ki == NULL || kd == NULL) return;
+
+    if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
+    {
+        /* 获取PID参数 */
+        *kp = systemState.motors[motorIndex].pidController.Kp;
+        *ki = systemState.motors[motorIndex].pidController.Ki;
+        *kd = systemState.motors[motorIndex].pidController.Kd;
+
+        osMutexRelease(motorDataMutexHandle);
+    }
+}
+
 /* I2C 输出节流（跟踪上次写入的原始 0~4095 PWM 值） */
 static uint16_t g_lastPwmRaw[4] = {0};
 
@@ -68,10 +116,14 @@ extern UART_HandleTypeDef huart1;
  * @param dir0Pin: 方向0控制GPIO引脚 (IN1)
  * @param dir1Port: 方向1控制GPIO端口 (IN2)
  * @param dir1Pin: 方向1控制GPIO引脚 (IN2)
+ * @param kp: PID比例系数
+ * @param ki: PID积分系数
+ * @param kd: PID微分系数
  */
 void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint8_t pwmChannel,
-               GPIO_TypeDef *dir0Port, uint16_t dir0Pin, 
-               GPIO_TypeDef *dir1Port, uint16_t dir1Pin)
+               GPIO_TypeDef *dir0Port, uint16_t dir0Pin,
+               GPIO_TypeDef *dir1Port, uint16_t dir1Pin,
+               float kp, float ki, float kd)
 {
   /* 初始化基本参数 */
   motor->id = id;
@@ -99,8 +151,8 @@ void MotorInit(Motor_t *motor, uint8_t id, TIM_HandleTypeDef *encoderTimer, uint
   motor->flags.overCurrent = 0;
   motor->flags.stalled = 0;
 
-  /* 初始化PID控制器 */
-  PIDInit(&motor->pidController, MOTOR_PID_KP, MOTOR_PID_KI, MOTOR_PID_KD,
+  /* 初始化PID控制器 - 使用独立的PID参数 */
+  PIDInit(&motor->pidController, kp, ki, kd,
           MOTOR_PID_MIN, MOTOR_PID_MAX);
 
   /* 设置方向引脚为输出 */
@@ -294,15 +346,19 @@ void MotorSystemInit(void)
     /* I2C互斥量获取失败输出已移除 */
   }
 
-  /* 初始化四个电机 - 使用两个方向引脚 */
-  MotorInit(&systemState.motors[0], 0, &htim2, 0, 
-            GPIOC, MOTOR1_DIR0_Pin, GPIOF, MOTOR1_DIR1_Pin);
-  MotorInit(&systemState.motors[1], 1, &htim3, 1, 
-            GPIOC, MOTOR2_DIR0_Pin, GPIOF, MOTOR2_DIR1_Pin);
-  MotorInit(&systemState.motors[2], 2, &htim4, 2, 
-            GPIOC, MOTOR3_DIR0_Pin, GPIOF, MOTOR3_DIR1_Pin);
-  MotorInit(&systemState.motors[3], 3, &htim5, 3, 
-            GPIOC, MOTOR4_DIR0_Pin, GPIOF, MOTOR4_DIR1_Pin);
+  /* 初始化四个电机 - 使用两个方向引脚，每个电机使用独立的PID参数 */
+  MotorInit(&systemState.motors[0], 0, &htim2, 0,
+            GPIOC, MOTOR1_DIR0_Pin, GPIOF, MOTOR1_DIR1_Pin,
+            MOTOR1_PID_KP, MOTOR1_PID_KI, MOTOR1_PID_KD);
+  MotorInit(&systemState.motors[1], 1, &htim3, 1,
+            GPIOC, MOTOR2_DIR0_Pin, GPIOF, MOTOR2_DIR1_Pin,
+            MOTOR2_PID_KP, MOTOR2_PID_KI, MOTOR2_PID_KD);
+  MotorInit(&systemState.motors[2], 2, &htim4, 2,
+            GPIOC, MOTOR3_DIR0_Pin, GPIOF, MOTOR3_DIR1_Pin,
+            MOTOR3_PID_KP, MOTOR3_PID_KI, MOTOR3_PID_KD);
+  MotorInit(&systemState.motors[3], 3, &htim5, 3,
+            GPIOC, MOTOR4_DIR0_Pin, GPIOF, MOTOR4_DIR1_Pin,
+            MOTOR4_PID_KP, MOTOR4_PID_KI, MOTOR4_PID_KD);
 
   /* 启动编码器计数 */
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
@@ -334,16 +390,12 @@ void MotorControlTask_Init(void *argument)
   motorControlPeriod_ms = MOTOR_CONTROL_PERIOD;      // 例如 10
   motorControlDt_s = motorControlPeriod_ms / 1000.0f;
 
-  /* 初始化所有电机的目标速度和PID参数 */
+  /* 初始化所有电机的目标速度 - PID参数已在MotorSystemInit中设置 */
   for (uint8_t i = 0; i < 4; i++)
   {
     if (osMutexAcquire(motorDataMutexHandle, 100) == osOK)
     {
-      /* 初始化PID控制器参数 - 根据实际电机特性调整 */
-      PIDInit(&systemState.motors[i].pidController,
-              MOTOR_PID_KP, MOTOR_PID_KI, MOTOR_PID_KD,
-              -100, 100); // 输出范围为-100到100，对应PWM百分比
-
+      /* PID控制器参数已在MotorSystemInit中初始化，这里只需设置初始目标速度 */
       /* 设置初始目标速度为0（带符号） */
       SetMotorSpeed(&systemState.motors[i], 0);
       osMutexRelease(motorDataMutexHandle);
