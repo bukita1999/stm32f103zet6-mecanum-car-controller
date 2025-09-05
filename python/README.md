@@ -26,6 +26,8 @@ python/
 ├── usb_communication.py     # USB异步通讯类
 ├── csv_exporter.py          # CSV数据导出器
 ├── test_stm32_communication.py  # 主测试程序
+├── keyboard_robot_control.py # 键盘控制机器人程序
+├── batch_data_receiver.py    # 批量数据接收器
 └── README.md                # 说明文档
 ```
 
@@ -40,7 +42,32 @@ python test_stm32_communication.py
 
 程序会提示输入串口号，默认为 COM3。
 
-### 2. 测试内容
+### 2. 键盘控制机器人
+
+```bash
+cd python
+python keyboard_robot_control.py
+```
+
+#### 控制键说明
+- **W** - 前进
+- **S** - 后退
+- **A** - 左转
+- **D** - 右转
+- **空格** - 停止
+- **Q** - 退出程序
+
+#### 运动命令格式
+程序使用以下串口命令格式控制机器人：
+- 前进: `$SPD,3000,-3000,-3000,3000#`
+- 后退: `$SPD,-3000,3000,3000,-3000#`
+- 左转: `$SPD,1500,-1500,-4500,4500#`
+- 右转: `$SPD,-1500,1500,4500,-4500#`
+- 停止: `$SPD,0,0,0,0#`
+
+**注意**: 松开按键时会自动停止机器人，确保安全操作。
+
+### 3. 测试内容
 
 程序包含两个主要测试：
 

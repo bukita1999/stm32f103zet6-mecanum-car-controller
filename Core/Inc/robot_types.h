@@ -14,22 +14,22 @@ extern "C" {
 
 /* 电机PID控制参数 - 针对电机轴转速（减速前）- 每个电机独立的PID参数 */
 /* 电机1 PID参数 */
-#define MOTOR1_PID_KP     0.015   /* 电机1比例系数*/
+#define MOTOR1_PID_KP     0.1   /* 电机1比例系数*/
 #define MOTOR1_PID_KI     0.0025  /* 电机1积分系数*/
 #define MOTOR1_PID_KD     0       /* 电机1微分系数*/
 
 /* 电机2 PID参数 */
-#define MOTOR2_PID_KP     0.015   /* 电机2比例系数*/
+#define MOTOR2_PID_KP     0.1   /* 电机2比例系数*/
 #define MOTOR2_PID_KI     0.0025  /* 电机2积分系数*/
 #define MOTOR2_PID_KD     0       /* 电机2微分系数*/
 
 /* 电机3 PID参数 */
-#define MOTOR3_PID_KP     0.015   /* 电机3比例系数*/
+#define MOTOR3_PID_KP     0.1   /* 电机3比例系数*/
 #define MOTOR3_PID_KI     0.0025  /* 电机3积分系数*/
 #define MOTOR3_PID_KD     0       /* 电机3微分系数*/
 
 /* 电机4 PID参数 */
-#define MOTOR4_PID_KP     0.015   /* 电机4比例系数*/
+#define MOTOR4_PID_KP     0.1   /* 电机4比例系数*/
 #define MOTOR4_PID_KI     0.0025  /* 电机4积分系数*/
 #define MOTOR4_PID_KD     0       /* 电机4微分系数*/
 

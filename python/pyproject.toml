@@ -8,6 +8,7 @@ dependencies = [
     "pyserial-asyncio>=0.6",
     "pandas>=1.5.0",
     "crcmod>=1.7",
+    "pyserial>=3.5",
 ]
 authors = [
     {name = "STM32 Car Project", email = "stm32car@example.com"},
