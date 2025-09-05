@@ -163,11 +163,11 @@ void UsbTask_Loop(void)
     uint8_t result = SendBatchData();
 
     if (result == USBD_OK) {
-        /* 发送成功，每100ms发送一批数据 */
-        osDelay(100);
+        /* 发送成功，每10ms发送一批数据 */
+        osDelay(10);
     } else {
         /* 发送失败，等待较短时间后重试 */
-        osDelay(50);
+        osDelay(5);
     }
 }
 

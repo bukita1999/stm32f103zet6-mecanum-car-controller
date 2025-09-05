@@ -19,7 +19,7 @@ import zlib  # 用于CRC32校验
 class STM32BatchDataReceiver:
     """STM32批量数据接收器"""
 
-    def __init__(self, port='COM4', baudrate=115200, timeout=0.1):
+    def __init__(self, port='COM4', baudrate=115200, timeout=0.02):
         """
         初始化接收器
 
