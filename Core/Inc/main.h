@@ -43,7 +43,7 @@ extern "C" {
 
 
 /* 系统相关定义 */
-#define MOTOR_CONTROL_PERIOD   10      /* 电机控制周期 (ms) */
+#define MOTOR_CONTROL_PERIOD   20      /* 电机控制周期 (ms) */
 #define SYSTEM_TICK_FREQ       1000    /* 系统时钟频率 (Hz) */
 
 /* 事件标志定义 */

@@ -68,7 +68,7 @@ static void GenerateBatchData(BatchHeader_t *header, BatchData_t *data, uint16_t
 
     /* 生成模拟数据 */
     for (uint16_t i = 0; i < count; i++) {
-        data[i].timestamp = header->start_time + i * 10;  /* 每10ms一组数据 */
+        data[i].timestamp = header->start_time + i * 20;  /* 每20ms一组数据 */
 
         /* 模拟四个电机的速度数据 */
         for (int motor = 0; motor < 4; motor++) {
@@ -163,8 +163,8 @@ void UsbTask_Loop(void)
     uint8_t result = SendBatchData();
 
     if (result == USBD_OK) {
-        /* 发送成功，每10ms发送一批数据 */
-        osDelay(10);
+        /* 发送成功，每20ms发送一批数据 */
+        osDelay(20);
     } else {
         /* 发送失败，等待较短时间后重试 */
         osDelay(5);
