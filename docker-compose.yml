@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  stm32-robot-control:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stm32-robot-control
+    restart: unless-stopped
+
+    # 串口设备映射
+    devices:
+      # CH340串口设备映射 (根据实际设备路径调整)
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "/dev/ttyACM0:/dev/ttyACM0"
+      # 虚拟串口设备映射 (如果使用虚拟串口)
+      - "/dev/ttyS0:/dev/ttyS0"
+      - "/dev/ttyS1:/dev/ttyS1"
+
+    # 特权模式以访问串口设备
+    privileged: true
+
+    # 环境变量
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+
+    # 音量挂载
+    volumes:
+      # X11显示服务器 (用于GUI应用程序如matplotlib)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # 数据目录挂载
+      - ./python/data:/app/data
+      # 配置文件挂载 (可选，用于热更新配置)
+      - ./python/robot_config.yaml:/app/robot_config.yaml:ro
+
+    # 网络模式
+    network_mode: host
+
+    # 工作目录
+    working_dir: /app
+
+    # 默认命令 (可以被覆盖)
+    command: ["python3", "--version"]
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import serial; print('Serial OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 标签
+    labels:
+      - "project=stm32-robot-control"
+      - "maintainer=ai-assistant"
+
+  # 可选: 串口监控服务
+  serial-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stm32-serial-monitor
+    profiles: ["monitor"]  # 只有在指定profile时才启动
+
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "/dev/ttyACM0:/dev/ttyACM0"
+
+    privileged: true
+
+    volumes:
+      - ./python/data:/app/data
+
+    command: ["./start.sh", "receiver"]
+
+    depends_on:
+      - stm32-robot-control
+
+# 网络配置
+networks:
+  default:
+    driver: bridge
+

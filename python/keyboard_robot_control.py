@@ -20,32 +20,36 @@ import time
 import sys
 import os
 import msvcrt  # Windows键盘输入库
+from config_loader import RobotConfigLoader
 
 
 class RobotController:
     """机器人控制器"""
 
-    def __init__(self, port='COM10', baudrate=115200):
+    def __init__(self, config_file='robot_config.yaml'):
         """
         初始化机器人控制器
 
         Args:
-            port: 串口端口
-            baudrate: 波特率
+            config_file: 配置文件路径
         """
-        self.port = port
-        self.baudrate = baudrate
+        # 加载配置文件
+        self.config_loader = RobotConfigLoader(config_file)
+
+        # 从配置文件获取串口设置
+        serial_config = self.config_loader.get_serial_config()
+        self.port = serial_config.get('port', 'COM10')
+        self.baudrate = serial_config.get('baudrate', 115200)
+        self.timeout = serial_config.get('timeout', 1.0)
+
         self.serial = None
         self.is_running = False
 
-        # 运动命令定义
-        self.commands = {
-            'forward': '$SPD,2000,-2000,-2000,2000#',   # 前进
-            'backward': '$SPD,-2000,2000,2000,-2000#',  # 后退
-            'left': '$SPD,1500,-1500,-2500,2500#',       # 左转
-            'right': '$SPD,-1500,1500,2500,-2500#',      # 右转
-            'stop': '$SPD,0,0,0,0#'                      # 停止
-        }
+        # 从配置文件加载运动命令
+        self.commands = {}
+        movement_commands = self.config_loader.get_movement_commands()
+        for cmd_name, cmd_info in movement_commands.items():
+            self.commands[cmd_name] = cmd_info.get('command', '')
 
         # 当前运动状态
         self.current_command = 'stop'
@@ -56,7 +60,7 @@ class RobotController:
             self.serial = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
-                timeout=1.0,
+                timeout=self.timeout,
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE
@@ -173,9 +177,10 @@ class RobotController:
 def main():
     """主函数"""
     print("机器人键盘控制程序启动中...")
+    print("使用YAML配置文件: robot_config.yaml")
 
-    # 创建控制器实例
-    controller = RobotController(port='COM10', baudrate=115200)
+    # 创建控制器实例（使用默认配置文件）
+    controller = RobotController()
 
     try:
         # 开始键盘控制
