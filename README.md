@@ -34,50 +34,6 @@
 #define MOTOR4_PID_KD     0       /* 电机4微分系数*/
 ```
 
-### 运行时PID参数调整
-项目提供了运行时调整PID参数的接口函数：
-
-```c
-/**
- * 设置指定电机的PID参数
- * @param motorIndex: 电机索引 (0-3)
- * @param kp: 比例系数
- * @param ki: 积分系数
- * @param kd: 微分系数
- */
-void SetMotorPIDParameters(uint8_t motorIndex, float kp, float ki, float kd);
-
-/**
- * 获取指定电机的PID参数
- * @param motorIndex: 电机索引 (0-3)
- * @param kp: 比例系数输出指针
- * @param ki: 积分系数输出指针
- * @param kd: 微分系数输出指针
- */
-void GetMotorPIDParameters(uint8_t motorIndex, float *kp, float *ki, float *kd);
-```
-
-### 使用示例
-```c
-// 设置电机1的PID参数
-SetMotorPIDParameters(0, 0.02, 0.003, 0.001);
-
-// 获取电机2的PID参数
-float kp, ki, kd;
-GetMotorPIDParameters(1, &kp, &ki, &kd);
-```
-
-### 修改内容
-1. **robot_types.h**: 为每个电机定义了独立的PID参数宏
-2. **motor_control.h**: 更新了MotorInit函数声明，添加了PID参数设置/获取函数
-3. **motor_control.c**: 修改了MotorInit函数实现，支持传入PID参数；添加了PID参数设置/获取函数的实现
-
-### 注意事项
-- 修改PID参数时会自动重置积分项和上一次误差，避免参数突变导致的控制不稳定
-- 所有PID参数修改都通过互斥量保护，确保线程安全
-- 可以通过USB通信或其他通信方式调用这些函数来实现远程PID参数调整
-
----
 
 ## 串口输入格式说明文档
 
