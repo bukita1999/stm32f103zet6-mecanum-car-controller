@@ -1,4 +1,4 @@
-# STM32-Small-Surface
+# 基于STM32F103ZET6与FreeRTOS的麦克纳姆轮四轮速度环闭环小车控制系统
 
 ## 项目概述
 
