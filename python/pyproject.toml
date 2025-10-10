@@ -1,0 +1,192 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stm32-robot-control"
+version = "1.0.0"
+description = "STM32机器人控制系统 - 支持串口通信和网络远程控制"
+readme = "README_DOCKER.md"
+license = {file = "../LICENSE"}
+requires-python = ">=3.11"
+authors = [
+    {name = "AI Assistant", email = "ai@example.com"},
+]
+maintainers = [
+    {name = "AI Assistant", email = "ai@example.com"},
+]
+keywords = ["robot", "stm32", "serial", "control", "mecanum", "raspberry-pi"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Hardware",
+    "Topic :: System :: Networking",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    # 基础依赖
+    "PyYAML>=6.0",
+    "crcmod>=1.7",
+    # 串口通信
+    "pyserial>=3.5",
+    "pyserial-asyncio>=0.6",
+    # 数据处理和分析
+    "pandas>=1.5.0",
+    "numpy>=1.21.0",
+    # 可视化
+    "matplotlib>=3.6.0",
+    "pynput>=1.8.1",
+]
+
+[project.optional-dependencies]
+# 网络控制客户端依赖 (x86电脑)
+client = [
+    "pynput>=1.7.0",  # 跨平台键盘监听
+]
+
+# 完整功能 (包含所有可选依赖)
+full = [
+    "pynput>=1.7.0",
+]
+
+# 开发依赖
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "flake8>=7.0.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+]
+
+# 文档依赖
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.2.0",
+    "myst-parser>=0.18.0",
+]
+
+[project.scripts]
+# 命令行脚本入口点
+robot-keyboard = "keyboard_robot_control:main"
+robot-receiver = "batch_data_receiver:main"
+robot-analyzer = "csv_analyzer:main"
+robot-config = "config_loader:main"
+
+# 网络控制脚本
+robot-client = "network_control.robot_control_client:main"
+robot-server = "network_control.robot_control_server:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/stm32-robot-control"
+Documentation = "https://stm32-robot-control.readthedocs.io/"
+Repository = "https://github.com/yourusername/stm32-robot-control.git"
+Issues = "https://github.com/yourusername/stm32-robot-control/issues"
+Changelog = "https://github.com/yourusername/stm32-robot-control/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+# Black 代码格式化配置
+[tool.black]
+line-length = 88
+target-version = ['py311', 'py312', 'py313']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# isort 导入排序配置
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["network_control"]
+known_third_party = ["serial", "pandas", "matplotlib", "pynput"]
+
+# mypy 类型检查配置
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "serial.*",
+    "pynput.*",
+    "matplotlib.*",
+    "pandas.*"
+]
+ignore_missing_imports = true
+
+# pytest 配置
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "serial: marks tests that require serial port",
+    "network: marks tests that require network",
+    "integration: marks tests as integration tests",
+]
+
+# Coverage 配置
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "*/venv/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

@@ -1,8 +1,35 @@
-pyserial-asyncio>=0.6
-pandas>=1.5.0
-crcmod>=1.7
-pyserial>=3.5
-PyYAML>=6.0
-matplotlib>=3.6.0
-tkinter>=8.6
+# STM32 Robot Control 依赖文件
+# 使用 uv pip install -r requirements.txt 安装
 
+# 基础依赖
+PyYAML>=6.0
+crcmod>=1.7
+
+# 串口通信
+pyserial>=3.5
+pyserial-asyncio>=0.6
+
+# 数据处理和分析
+pandas>=1.5.0
+numpy>=1.21.0
+
+# 可视化
+matplotlib>=3.6.0
+
+# 注意：
+# tkinter 是系统包，通常不需要单独安装
+# 在不同的操作系统上安装方式：
+# - Ubuntu/Debian: sudo apt-get install python3-tk
+# - CentOS/RHEL: sudo yum install tkinter
+# - macOS: tkinter 通常已包含在 Python 中
+# - Windows: tkinter 通常已包含在 Python 中
+
+# 网络控制客户端额外依赖 (可选)
+# pynput>=1.7.0  # 跨平台键盘监听
+
+# 开发依赖 (可选)
+# pytest>=7.0.0
+# black>=23.0.0
+# isort>=5.12.0
+# flake8>=6.0.0
+# mypy>=1.0.0
