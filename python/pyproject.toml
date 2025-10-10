@@ -44,7 +44,6 @@ dependencies = [
     "numpy>=1.21.0",
     # 可视化
     "matplotlib>=3.6.0",
-    "pynput>=1.8.1",
 ]
 
 [project.optional-dependencies]
