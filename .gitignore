@@ -88,6 +88,15 @@ python/output/
 ehthumbs.db
 Thumbs.db
 
+# uv 相关
+uv.lock
+.python-version
+
+# Python 字节码缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
 # uv 相关 (python/ 目录下)
 python/.python-version
 python/uv.lock

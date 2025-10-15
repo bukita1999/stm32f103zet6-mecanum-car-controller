@@ -268,6 +268,24 @@ class RobotControlServer:
                 else:
                     logging.warning(f"未知的控制命令: {command}")
 
+            elif msg_type == 'custom_speed':
+                # 处理自定义轮速命令
+                speeds = message.get('speeds', [])
+                duration = message.get('duration', 0)  # 可选的持续时间（秒）
+
+                if self._validate_custom_speeds(speeds):
+                    # 添加到命令队列
+                    await self.command_queue.put({
+                        'type': 'custom_speed',
+                        'speeds': speeds,
+                        'duration': duration,
+                        'timestamp': timestamp,
+                        'client': writer
+                    })
+                    logging.info(f"接收自定义轮速命令: {speeds}, 持续时间: {duration}s")
+                else:
+                    logging.warning(f"无效的自定义轮速参数: {speeds}")
+
             elif msg_type == 'ping':
                 # 响应ping消息
                 response = {
@@ -284,6 +302,60 @@ class RobotControlServer:
         except Exception as e:
             logging.error(f"消息处理错误: {e}")
 
+    def _validate_custom_speeds(self, speeds):
+        """验证自定义轮速参数"""
+        try:
+            # 检查是否是包含4个元素的列表
+            if not isinstance(speeds, list) or len(speeds) != 4:
+                logging.warning("自定义轮速必须是包含4个元素的列表")
+                return False
+
+            # 检查每个速度值是否是有效的整数
+            for i, speed in enumerate(speeds):
+                if not isinstance(speed, (int, float)):
+                    logging.warning(f"电机{i}速度必须是数字: {speed}")
+                    return False
+
+                # 检查速度范围（根据配置文件中的限制）
+                speed_int = int(speed)
+                if speed_int < -3000 or speed_int > 3000:
+                    logging.warning(f"电机{i}速度超出范围[-3000, 3000]: {speed_int}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            logging.error(f"验证自定义轮速时发生错误: {e}")
+            return False
+
+    def _generate_custom_speed_command(self, speeds):
+        """生成自定义轮速的串口命令"""
+        try:
+            # 确保速度是整数
+            int_speeds = [int(speed) for speed in speeds]
+            # 生成$SPD命令格式
+            command = f"$SPD,{int_speeds[0]},{int_speeds[1]},{int_speeds[2]},{int_speeds[3]}#"
+            return command
+        except Exception as e:
+            logging.error(f"生成自定义轮速命令时发生错误: {e}")
+            return "$SPD,0,0,0,0#"  # 返回停止命令作为fallback
+
+    async def _schedule_stop(self, duration):
+        """定时停止机器人运动"""
+        try:
+            await asyncio.sleep(duration)
+            # 发送停止命令
+            stop_command = "$SPD,0,0,0,0#"
+            if await self.serial_controller.send_command(stop_command):
+                self.current_command = 'stop'
+                self.last_command_time = time.time()
+                await self.broadcast_status()
+                logging.info(f"✓ 定时停止: 运动持续{duration}秒后自动停止")
+            else:
+                logging.error("✗ 定时停止失败")
+        except Exception as e:
+            logging.error(f"定时停止任务出错: {e}")
+
     async def command_processor(self):
         """命令处理器 - 处理命令队列"""
         logging.info("命令处理器启动")
@@ -296,28 +368,56 @@ class RobotControlServer:
                     timeout=1.0
                 )
 
-                command = command_data['command']
+                command_type = command_data.get('type', 'control')
                 timestamp = command_data['timestamp']
 
-                # 检查是否是重复命令
-                if command == self.current_command:
-                    continue
+                if command_type == 'custom_speed':
+                    # 处理自定义轮速命令
+                    speeds = command_data['speeds']
+                    duration = command_data.get('duration', 0)
 
-                # 获取串口命令
-                if command in self.commands:
-                    serial_command = self.commands[command]
+                    # 生成串口命令
+                    serial_command = self._generate_custom_speed_command(speeds)
 
                     # 发送到串口
                     if await self.serial_controller.send_command(serial_command):
-                        self.current_command = command
+                        self.current_command = f"custom_speed_{speeds}"
                         self.last_command_time = time.time()
 
                         # 广播状态更新给所有客户端
                         await self.broadcast_status()
 
-                        logging.info(f"✓ 执行命令: {command} -> {serial_command.strip()}")
+                        logging.info(f"✓ 执行自定义轮速命令: {speeds} -> {serial_command.strip()}")
+
+                        # 如果设置了持续时间，创建定时停止任务
+                        if duration > 0:
+                            asyncio.create_task(self._schedule_stop(duration))
                     else:
-                        logging.error(f"✗ 执行命令失败: {command}")
+                        logging.error(f"✗ 执行自定义轮速命令失败: {speeds}")
+
+                else:
+                    # 处理预定义命令
+                    command = command_data['command']
+
+                    # 检查是否是重复命令
+                    if command == self.current_command:
+                        continue
+
+                    # 获取串口命令
+                    if command in self.commands:
+                        serial_command = self.commands[command]
+
+                        # 发送到串口
+                        if await self.serial_controller.send_command(serial_command):
+                            self.current_command = command
+                            self.last_command_time = time.time()
+
+                            # 广播状态更新给所有客户端
+                            await self.broadcast_status()
+
+                            logging.info(f"✓ 执行命令: {command} -> {serial_command.strip()}")
+                        else:
+                            logging.error(f"✗ 执行命令失败: {command}")
 
                 self.command_queue.task_done()
 

@@ -161,6 +161,67 @@ class RobotControlClient:
             self.is_connected = False
             return False
 
+    def send_custom_speed(self, speeds, duration=0):
+        """Send custom speed command to server"""
+        if not self.is_connected:
+            self.log_message("✗ Not connected to server")
+            return False
+
+        # Validate speeds
+        if not self._validate_custom_speeds(speeds):
+            return False
+
+        try:
+            # Construct message
+            message = {
+                'type': 'custom_speed',
+                'speeds': speeds,
+                'duration': duration,
+                'timestamp': time.time()
+            }
+
+            # Send message
+            data = json.dumps(message).encode('utf-8')
+            self.socket.sendall(data)
+
+            # Update status
+            self.current_command = f"custom_speed_{speeds}"
+            self.last_command_time = time.time()
+
+            duration_text = f" for {duration}s" if duration > 0 else ""
+            self.log_message(f"→ Sent custom speed: {speeds}{duration_text}")
+            return True
+
+        except Exception as e:
+            self.log_message(f"✗ Failed to send custom speed: {e}")
+            self.is_connected = False
+            return False
+
+    def _validate_custom_speeds(self, speeds):
+        """Validate custom speed parameters"""
+        try:
+            # Check if it's a list with 4 elements
+            if not isinstance(speeds, list) or len(speeds) != 4:
+                self.log_message("✗ Custom speeds must be a list of 4 values")
+                return False
+
+            # Check each speed value
+            for i, speed in enumerate(speeds):
+                if not isinstance(speed, (int, float)):
+                    self.log_message(f"✗ Motor {i} speed must be a number: {speed}")
+                    return False
+
+                speed_int = int(speed)
+                if speed_int < -3000 or speed_int > 3000:
+                    self.log_message(f"✗ Motor {i} speed out of range [-3000, 3000]: {speed_int}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            self.log_message(f"✗ Error validating custom speeds: {e}")
+            return False
+
     def on_key_press(self, key):
         """Handle key press events"""
         try:
@@ -265,7 +326,7 @@ class RobotControlClient:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(4, weight=1)
+        main_frame.rowconfigure(5, weight=1)
 
         # Title
         title_label = ttk.Label(main_frame, text="Robot Network Control Client",
@@ -312,9 +373,49 @@ Note: Robot will continue moving after each key press until next key press
         control_label = ttk.Label(control_frame, text=control_text, justify=tk.LEFT)
         control_label.grid(row=0, column=0, sticky=tk.W)
 
+        # Custom speed control
+        custom_frame = ttk.LabelFrame(main_frame, text="Custom Speed Control", padding="5")
+        custom_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+
+        # Motor speed inputs
+        ttk.Label(custom_frame, text="Motor 0:").grid(row=0, column=0, padx=(0, 5))
+        self.motor0_entry = ttk.Entry(custom_frame, width=8)
+        self.motor0_entry.insert(0, "0")
+        self.motor0_entry.grid(row=0, column=1, padx=(0, 10))
+
+        ttk.Label(custom_frame, text="Motor 1:").grid(row=0, column=2, padx=(0, 5))
+        self.motor1_entry = ttk.Entry(custom_frame, width=8)
+        self.motor1_entry.insert(0, "0")
+        self.motor1_entry.grid(row=0, column=3, padx=(0, 10))
+
+        ttk.Label(custom_frame, text="Motor 2:").grid(row=1, column=0, padx=(0, 5))
+        self.motor2_entry = ttk.Entry(custom_frame, width=8)
+        self.motor2_entry.insert(0, "0")
+        self.motor2_entry.grid(row=1, column=1, padx=(0, 10))
+
+        ttk.Label(custom_frame, text="Motor 3:").grid(row=1, column=2, padx=(0, 5))
+        self.motor3_entry = ttk.Entry(custom_frame, width=8)
+        self.motor3_entry.insert(0, "0")
+        self.motor3_entry.grid(row=1, column=3, padx=(0, 10))
+
+        # Duration input
+        ttk.Label(custom_frame, text="Duration (s):").grid(row=2, column=0, padx=(0, 5))
+        self.duration_entry = ttk.Entry(custom_frame, width=8)
+        self.duration_entry.insert(0, "0")
+        self.duration_entry.grid(row=2, column=1, padx=(0, 10))
+
+        # Control buttons
+        button_frame = ttk.Frame(custom_frame)
+        button_frame.grid(row=2, column=2, columnspan=2, pady=(5, 0))
+
+        ttk.Button(button_frame, text="Send Custom Speed",
+                  command=self.send_custom_speed_gui).grid(row=0, column=0, padx=(0, 5))
+        ttk.Button(button_frame, text="Stop",
+                  command=self.send_stop_command).grid(row=0, column=1)
+
         # Log display
         log_frame = ttk.LabelFrame(main_frame, text="Runtime Log", padding="5")
-        log_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        log_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         # Create scrollbar
         scrollbar = ttk.Scrollbar(log_frame)
@@ -373,6 +474,35 @@ Note: Robot will continue moving after each key press until next key press
 
         # 等待对话框关闭
         self.root.wait_window(dialog)
+
+    def send_custom_speed_gui(self):
+        """Send custom speed command from GUI"""
+        try:
+            # Get values from GUI entries
+            speeds = [
+                int(self.motor0_entry.get()),
+                int(self.motor1_entry.get()),
+                int(self.motor2_entry.get()),
+                int(self.motor3_entry.get())
+            ]
+            duration = float(self.duration_entry.get())
+
+            # Send command
+            if self.send_custom_speed(speeds, duration):
+                self.log_message(f"✓ Custom speed sent from GUI: {speeds}")
+            else:
+                self.log_message("✗ Failed to send custom speed from GUI")
+
+        except ValueError as e:
+            self.log_message(f"✗ Invalid input values: {e}")
+            messagebox.showerror("Input Error", f"Invalid input values: {e}")
+
+    def send_stop_command(self):
+        """Send stop command"""
+        if self.send_command('space'):
+            self.log_message("✓ Stop command sent")
+        else:
+            self.log_message("✗ Failed to send stop command")
 
     def start_client(self):
         """Start the client"""
