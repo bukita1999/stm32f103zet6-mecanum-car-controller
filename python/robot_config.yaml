@@ -3,7 +3,7 @@
 
 # 串口配置
 serial:
-  port: "COM10"
+  port: "COM9"
   baudrate: 115200
   timeout: 1.0
 
@@ -16,32 +16,27 @@ movement_commands:
   # 前进命令
   forward:
     description: "前进"
-    speeds: [2000, -2000, -2000, 2000]  # motor0, motor1, motor2, motor3
-    command: "$SPD,2000,-2000,-2000,2000#"
+    speeds: [-3000, 3000, 3000, -3000]  # motor0, motor1, motor2, motor3
 
   # 后退命令
   backward:
     description: "后退"
-    speeds: [-2000, 2000, 2000, -2000]  # motor0, motor1, motor2, motor3
-    command: "$SPD,-2000,2000,2000,-2000#"
+    speeds: [3000, -3000, -3000, 3000]  # motor0, motor1, motor2, motor3
 
   # 左转命令
   left:
     description: "左转"
-    speeds: [1500, -1500, -2500, 2500]  # motor0, motor1, motor2, motor3
-    command: "$SPD,1500,-1500,-2500,2500#"
+    speeds: [-1000, 1000, 4000, -4000]  # motor0, motor1, motor2, motor3
 
   # 右转命令
   right:
     description: "右转"
-    speeds: [-1500, 1500, 2500, -2500]  # motor0, motor1, motor2, motor3
-    command: "$SPD,-1500,1500,2500,-2500#"
+    speeds: [-4000, 4000, 1000, -1000]  # motor0, motor1, motor2, motor3
 
   # 停止命令
   stop:
     description: "停止"
     speeds: [0, 0, 0, 0]  # motor0, motor1, motor2, motor3
-    command: "$SPD,0,0,0,0#"
 
 # 电机配置
 motors:
@@ -63,7 +58,7 @@ movement_params:
   max_speed: 3000      # 最大速度 (RPM)
   min_speed: -3000     # 最小速度 (RPM)
   turn_speed: 2500     # 转弯速度 (RPM)
-  default_speed: 2000  # 默认前进速度 (RPM)
+  default_speed: 3000  # 默认前进速度 (RPM)
 
 # PID参数 (可选，用于未来扩展)
 pid_defaults:

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "stm32-robot-control-raspberry-pi"
 version = "1.0.0"
 description = "STM32机器人控制系统 - 树莓派服务端"
-readme = "README_RASP.md"
+readme = "../Docu/README_RASP.md"
 license = {file = "../LICENSE"}
 requires-python = ">=3.11"
 authors = [

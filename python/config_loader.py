@@ -98,18 +98,29 @@ class RobotConfigLoader:
 
     def get_command_by_name(self, command_name: str) -> str:
         """
-        根据命令名称获取命令字符串
+        根据命令名称获取命令字符串（由 speeds 自适应生成）
 
         Args:
             command_name: 命令名称 (forward, backward, left, right, stop)
 
         Returns:
-            命令字符串
+            命令字符串，例如: "$SPD,-2000, 2000, 2000, -2000#"
         """
-        commands = self.get_movement_commands()
-        if command_name in commands:
-            return commands[command_name].get('command', '')
-        return ''
+        speeds = self.get_command_speeds(command_name)
+        return self._build_command_from_speeds(speeds)
+
+    def _build_command_from_speeds(self, speeds: List[int]) -> str:
+        """
+        根据 4 路电机 speeds 生成标准命令字符串。
+
+        Args:
+            speeds: [motor0, motor1, motor2, motor3]
+
+        Returns:
+            形如 "$SPD,-2000, 2000, 2000, -2000#" 的命令字符串
+        """
+        # 使用", "分隔以保持可读性；下位机一般会忽略空格
+        return f"$SPD,{int(speeds[0])}, {int(speeds[1])}, {int(speeds[2])}, {int(speeds[3])}#"
 
     def get_command_speeds(self, command_name: str) -> List[int]:
         """
@@ -164,11 +175,7 @@ class RobotConfigLoader:
                     print(f"✗ 缺少必需的运动命令: {cmd}")
                     return False
 
-                # 检查每个命令是否有必需的字段
-                if 'command' not in commands[cmd]:
-                    print(f"✗ 命令 {cmd} 缺少 'command' 字段")
-                    return False
-
+                # 检查每个命令是否有必需的字段（以 speeds 为准）
                 if 'speeds' not in commands[cmd]:
                     print(f"✗ 命令 {cmd} 缺少 'speeds' 字段")
                     return False

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 机器人键盘控制程序
-通过键盘控制机器人运动，使用COM10串口通信
+通过键盘控制机器人运动，使用COM9串口通信
 
 控制键：
 W - 前进
@@ -38,18 +38,19 @@ class RobotController:
 
         # 从配置文件获取串口设置
         serial_config = self.config_loader.get_serial_config()
-        self.port = serial_config.get('port', 'COM10')
+        self.port = serial_config.get('port', 'COM9')
         self.baudrate = serial_config.get('baudrate', 115200)
         self.timeout = serial_config.get('timeout', 1.0)
 
         self.serial = None
         self.is_running = False
 
-        # 从配置文件加载运动命令
+        # 从配置文件加载运动命令（以 speeds 为准，运行时生成命令字符串）
         self.commands = {}
         movement_commands = self.config_loader.get_movement_commands()
         for cmd_name, cmd_info in movement_commands.items():
-            self.commands[cmd_name] = cmd_info.get('command', '')
+            speeds = cmd_info.get('speeds', [0, 0, 0, 0])
+            self.commands[cmd_name] = self.config_loader._build_command_from_speeds(speeds)
 
         # 当前运动状态
         self.current_command = 'stop'
@@ -81,7 +82,9 @@ class RobotController:
             print(f"✗ 无效的命令: {command_key}")
             return False
 
-        command = self.commands[command_key]
+        # 以 speeds 为准：每次发送前根据最新配置动态生成命令
+        speeds = self.config_loader.get_command_speeds(command_key)
+        command = self.config_loader._build_command_from_speeds(speeds)
 
         try:
             # 发送命令
