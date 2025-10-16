@@ -301,7 +301,7 @@ def main():
     print("=" * 40)
 
     # 创建接收器实例
-    receiver = STM32BatchDataReceiver(port='COM11', baudrate=115200)
+    receiver = STM32BatchDataReceiver(port='COM10', baudrate=115200)
 
     try:
         # 连接串口
