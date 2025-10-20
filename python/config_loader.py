@@ -41,14 +41,14 @@ class RobotConfigLoader:
             with open(self.config_file, 'r', encoding='utf-8') as file:
                 self.config = yaml.safe_load(file)
 
-            print(f"✓ 成功加载配置文件: {self.config_file}")
+            print(f"[OK] 成功加载配置文件: {self.config_file}")
             return True
 
         except yaml.YAMLError as e:
-            print(f"✗ YAML配置文件解析错误: {e}")
+            print(f"[ERROR] YAML配置文件解析错误: {e}")
             return False
         except Exception as e:
-            print(f"✗ 加载配置文件失败: {e}")
+            print(f"[ERROR] 加载配置文件失败: {e}")
             return False
 
     def get_serial_config(self) -> Dict[str, Any]:
@@ -114,20 +114,28 @@ class RobotConfigLoader:
         """
         return self.config.get('pid_defaults', {})
 
+    def build_command_from_speeds(self, speeds: List[int]) -> str:
+        """根据速度列表构造标准串口命令字符串。
+
+        统一规范：始终从 speeds 生成 "$SPD,<m0>,<m1>,<m2>,<m3>#"，忽略 YAML 中的 command 字段。
+        """
+        if not isinstance(speeds, list) or len(speeds) != 4:
+            speeds = [0, 0, 0, 0]
+        m0, m1, m2, m3 = [int(s) for s in speeds]
+        return f"$SPD,{m0},{m1},{m2},{m3}#"
+
     def get_command_by_name(self, command_name: str) -> str:
         """
-        根据命令名称获取命令字符串
+        根据命令名称获取命令字符串（由 speeds 动态生成）。
 
         Args:
             command_name: 命令名称 (forward, backward, left, right, stop)
 
         Returns:
-            命令字符串
+            命令字符串（形如 $SPD,*,*,*,*#）
         """
-        commands = self.get_movement_commands()
-        if command_name in commands:
-            return commands[command_name].get('command', '')
-        return ''
+        speeds = self.get_command_speeds(command_name)
+        return self.build_command_from_speeds(speeds)
 
     def get_command_speeds(self, command_name: str) -> List[int]:
         """
@@ -171,7 +179,7 @@ class RobotConfigLoader:
             required_sections = ['serial', 'movement_commands']
             for section in required_sections:
                 if section not in self.config:
-                    print(f"✗ 配置缺少必需的章节: {section}")
+                    print(f"[ERROR] 配置缺少必需的章节: {section}")
                     return False
 
             # 检查运动命令
@@ -179,29 +187,25 @@ class RobotConfigLoader:
             required_commands = ['forward', 'backward', 'left', 'right', 'stop']
             for cmd in required_commands:
                 if cmd not in commands:
-                    print(f"✗ 缺少必需的运动命令: {cmd}")
+                    print(f"[ERROR] 缺少必需的运动命令: {cmd}")
                     return False
 
-                # 检查每个命令是否有必需的字段
-                if 'command' not in commands[cmd]:
-                    print(f"✗ 命令 {cmd} 缺少 'command' 字段")
-                    return False
+            # 检查每个命令是否有必需的字段（仅要求 speeds）
+            if 'speeds' not in commands[cmd]:
+                print(f"[ERROR] 命令 {cmd} 缺少 'speeds' 字段")
+                return False
 
-                if 'speeds' not in commands[cmd]:
-                    print(f"✗ 命令 {cmd} 缺少 'speeds' 字段")
-                    return False
+            # 检查速度列表长度
+            speeds = commands[cmd]['speeds']
+            if not isinstance(speeds, list) or len(speeds) != 4:
+                print(f"[ERROR] 命令 {cmd} 的 speeds 必须是包含4个元素的列表")
+                return False
 
-                # 检查速度列表长度
-                speeds = commands[cmd]['speeds']
-                if not isinstance(speeds, list) or len(speeds) != 4:
-                    print(f"✗ 命令 {cmd} 的 speeds 必须是包含4个元素的列表")
-                    return False
-
-            print("✓ 配置文件验证通过")
+            print("[OK] 配置文件验证通过")
             return True
 
         except Exception as e:
-            print(f"✗ 配置文件验证失败: {e}")
+            print(f"[ERROR] 配置文件验证失败: {e}")
             return False
 
 
@@ -225,8 +229,9 @@ def main():
     commands = loader.get_movement_commands()
     for name, cmd_info in commands.items():
         print(f"  {name}: {cmd_info.get('description', '')}")
-        print(f"    命令: {cmd_info.get('command', '')}")
-        print(f"    速度: {cmd_info.get('speeds', [])}")
+        speeds = cmd_info.get('speeds', [])
+        print(f"    命令: {loader.build_command_from_speeds(speeds)}")
+        print(f"    速度: {speeds}")
 
     print("\n电机配置:")
     motors = loader.get_motor_config()
@@ -236,4 +241,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

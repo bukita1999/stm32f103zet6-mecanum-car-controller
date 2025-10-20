@@ -22,14 +22,14 @@ movement_commands:
   # 前进命令
   forward:
     description: "前进"
-    speeds: [-2000, 2000, 2000, -2000]  # motor0, motor1, motor2, motor3
-    command: "$SPD,2000,-2000,-2000,2000#"
+    speeds: [-4000, 4000, 4000, -4000]  # motor0, motor1, motor2, motor3
+    command: "$SPD,4000,-4000,-4000,4000#"
 
   # 后退命令
   backward:
     description: "后退"
-    speeds: [2000, -2000, -2000, 2000]  # motor0, motor1, motor2, motor3
-    command: "$SPD,-2000,2000,2000,-2000#"
+    speeds: [4000, -4000, -4000, 4000]  # motor0, motor1, motor2, motor3
+    command: "$SPD,-4000,4000,4000,-4000#"
 
   # 左转命令
   left:
@@ -65,11 +65,11 @@ motors:
     direction: "positive_clockwise"
 
 # 运动参数
-movement_params:
-  max_speed: 3000      # 最大速度 (RPM)
-  min_speed: -3000     # 最小速度 (RPM)
-  turn_speed: 2500     # 转弯速度 (RPM)
-  default_speed: 2000  # 默认前进速度 (RPM)
+# movement_params:
+#   max_speed: 3000      # 最大速度 (RPM)
+#   min_speed: -3000     # 最小速度 (RPM)
+#   turn_speed: 2500     # 转弯速度 (RPM)
+#   default_speed: 4000  # 默认前进速度 (RPM)
 
 # PID参数 (可选，用于未来扩展)
 pid_defaults:

@@ -91,3 +91,5 @@ Thumbs.db
 # uv 相关 (python/ 目录下)
 python/.python-version
 python/uv.lock
+
+*.png

@@ -37,14 +37,14 @@ def find_latest_csv(prefix: str = "stm32_text_data_", suffix: str = ".csv") -> s
 
 
 def wait_for_space_to_start() -> bool:
-    print("\nReady: press SPACE to start, ESC to cancel…")
+    print("\nReady: press SPACE to start, ESC to cancel...")
     while True:
         if msvcrt.kbhit():
             ch = msvcrt.getch()
             if not ch:
                 continue
             if ch == b' ':
-                print("Starting run…")
+                print("Starting run...")
                 return True
             # ESC
             if ch == b'\x1b':
@@ -57,7 +57,7 @@ def collect_for_duration(receiver: STM32BatchDataReceiver, duration_s: float = 5
     start = time.time()
     if receiver.csv_writer is None:
         receiver.create_csv_file()
-    print(f"Collecting for ~{duration_s:.1f}s…")
+    print(f"Collecting for ~{duration_s:.1f}s...")
     while (time.time() - start) < duration_s:
         try:
             if receiver.serial and receiver.serial.in_waiting > 0:
@@ -123,7 +123,7 @@ def main():
     parser.add_argument('--config', default='robot_config.yaml', help='Robot control config path')
     args = parser.parse_args()
 
-    print("PID tuner run starting…")
+    print("PID tuner run starting...")
     print(f"Duration: {args.duration:.1f}s")
     print(f"Config: {args.config}")
 
@@ -162,7 +162,7 @@ def main():
             receiver.process_frame(data)
 
     except KeyboardInterrupt:
-        print("Interrupted, stopping…")
+        print("Interrupted, stopping...")
         try:
             controller.send_command('stop')
         except Exception:
