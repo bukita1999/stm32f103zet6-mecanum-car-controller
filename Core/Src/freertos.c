@@ -88,6 +88,7 @@ const osThreadAttr_t CommunicationTa_attributes = {
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for MonitorTask */
+
 osThreadId_t MonitorTaskHandle;
 const osThreadAttr_t MonitorTask_attributes = {
   .name = "MonitorTask",
