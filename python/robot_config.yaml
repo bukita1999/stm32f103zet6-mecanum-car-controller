@@ -1,11 +1,17 @@
 # 机器人运动控制配置文件
 # 定义轮子前进后退左转右转的运动参数
 
-# 串口配置
+# 串口配置（统一管理）
+# 为兼容旧脚本：如果没有 control/receive 子项，旧字段仍被读取
 serial:
-  port: "COM10"
-  baudrate: 115200
-  timeout: 1.0
+  control:
+    port: "COM10"
+    baudrate: 115200
+    timeout: 1.0
+  receive:
+    port: "COM11"
+    baudrate: 115200
+    timeout: 0.02
 
 # 运动命令定义
 # 格式: $SPD,motor0_speed,motor1_speed,motor2_speed,motor3_speed#
@@ -16,25 +22,25 @@ movement_commands:
   # 前进命令
   forward:
     description: "前进"
-    speeds: [2000, -2000, -2000, 2000]  # motor0, motor1, motor2, motor3
+    speeds: [-2000, 2000, 2000, -2000]  # motor0, motor1, motor2, motor3
     command: "$SPD,2000,-2000,-2000,2000#"
 
   # 后退命令
   backward:
     description: "后退"
-    speeds: [-2000, 2000, 2000, -2000]  # motor0, motor1, motor2, motor3
+    speeds: [2000, -2000, -2000, 2000]  # motor0, motor1, motor2, motor3
     command: "$SPD,-2000,2000,2000,-2000#"
 
   # 左转命令
   left:
     description: "左转"
-    speeds: [1500, -1500, -2500, 2500]  # motor0, motor1, motor2, motor3
+    speeds: [-1500, 1500, 2500, -2500]  # motor0, motor1, motor2, motor3
     command: "$SPD,1500,-1500,-2500,2500#"
 
   # 右转命令
   right:
     description: "右转"
-    speeds: [-1500, 1500, 2500, -2500]  # motor0, motor1, motor2, motor3
+    speeds: [-2500, 2500, 1500, -1500]  # motor0, motor1, motor2, motor3
     command: "$SPD,-1500,1500,2500,-2500#"
 
   # 停止命令

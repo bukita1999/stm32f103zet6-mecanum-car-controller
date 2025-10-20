@@ -58,7 +58,25 @@ class RobotConfigLoader:
         Returns:
             串口配置字典
         """
-        return self.config.get('serial', {})
+        return self.get_serial_control_config()
+
+    def get_serial_control_config(self) -> Dict[str, Any]:
+        """获取运动控制串口配置（兼容旧格式）"""
+        serial_cfg = self.config.get('serial', {})
+        if isinstance(serial_cfg, dict) and isinstance(serial_cfg.get('control'), dict):
+            return serial_cfg.get('control', {})
+        if isinstance(serial_cfg, dict) and 'port' in serial_cfg:
+            return serial_cfg
+        return self.config.get('serial_control', {})
+
+    def get_serial_receive_config(self) -> Dict[str, Any]:
+        """获取数据接收串口配置（兼容旧格式）"""
+        serial_cfg = self.config.get('serial', {})
+        if isinstance(serial_cfg, dict) and isinstance(serial_cfg.get('receive'), dict):
+            return serial_cfg.get('receive', {})
+        if isinstance(serial_cfg, dict) and 'port' in serial_cfg:
+            return {}
+        return self.config.get('serial_receive', {})
 
     def get_movement_commands(self) -> Dict[str, Dict[str, Any]]:
         """

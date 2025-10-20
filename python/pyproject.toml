@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.18.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stm32-small-surface-python"
+version = "0.1.0"
+description = "Scripts for STM32 robot control and telemetry"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Project Authors" }]
+
+# Core runtime dependencies inferred from the codebase
+dependencies = [
+  "pyserial>=3.5",
+  "pandas>=1.5.0",
+  "matplotlib>=3.6.0",
+  "PyYAML>=6.0",
+  "numpy>=1.23",
+]
+
+[project.optional-dependencies]
+# GUI scripts rely on the system-provided Tk (tkinter) which is part of CPython on Windows/macOS.
+# Not installable from PyPI; ensure your Python includes Tk support.
+gui = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+# Make hatch include top-level scripts (no package dir)
+[tool.hatch.build.targets.wheel]
+packages = []
+# Keep it simple: include our .py scripts and config/docs in this folder
+only-include = [
+  "batch_data_receiver.py",
+  "keyboard_robot_control.py",
+  "pid_tuner_run_and_record.py",
+  "csv_analyzer.py",
+  "config_loader.py",
+  "robot_config.yaml",
+  "requirements.txt",
+  "README_DOCKER.md",
+  "start.sh",
+]
+
+[project.scripts]
+pid-tuner = "pid_tuner_run_and_record:main"
+robot-keyboard = "keyboard_robot_control:main"
+batch-recv = "batch_data_receiver:main"
