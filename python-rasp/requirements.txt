@@ -1,0 +1,10 @@
+# STM32 Robot Control - Raspberry Pi Server 依赖文件
+# 使用 pip install -r requirements.txt 安装
+
+# 基础依赖
+PyYAML>=6.0
+crcmod>=1.7
+
+# 串口通信
+pyserial>=3.5
+pyserial-asyncio>=0.6

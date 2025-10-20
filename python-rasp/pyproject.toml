@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stm32-robot-control-raspberry-pi"
+version = "1.0.0"
+description = "STM32机器人控制系统 - 树莓派服务端"
+readme = "../Docu/README_RASP.md"
+license = {file = "../LICENSE"}
+requires-python = ">=3.11"
+authors = [
+    {name = "AI Assistant", email = "ai@example.com"},
+]
+maintainers = [
+    {name = "AI Assistant", email = "ai@example.com"},
+]
+keywords = ["robot", "stm32", "serial", "control", "mecanum", "raspberry-pi", "server"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Hardware",
+    "Topic :: System :: Networking",
+]
+
+dependencies = [
+    # 基础依赖
+    "PyYAML>=6.0",
+    "crcmod>=1.7",
+    # 串口通信
+    "pyserial>=3.5",
+    "pyserial-asyncio>=0.6",
+]
+
+[project.scripts]
+# 网络控制服务端脚本
+robot-server = "robot_control_server:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/stm32-robot-control"
+Documentation = "https://stm32-robot-control.readthedocs.io/"
+Repository = "https://github.com/yourusername/stm32-robot-control.git"
+Issues = "https://github.com/yourusername/stm32-robot-control/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

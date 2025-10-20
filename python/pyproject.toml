@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# GUI scripts rely on the system-provided Tk (tkinter) which is part of CPython on Windows/macOS.
+# GUI scripts rely on the system-provided Tk (tkinter) which ships with CPython on Windows/macOS.
 # Not installable from PyPI; ensure your Python includes Tk support.
 gui = []
 
