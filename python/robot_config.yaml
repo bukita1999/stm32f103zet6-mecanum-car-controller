@@ -34,13 +34,13 @@ movement_commands:
   # 左转命令
   left:
     description: "左转"
-    speeds: [-1500, 1500, 2500, -2500]  # motor0, motor1, motor2, motor3
+    speeds: [-2000, 1500, 4500, -5000]  # motor0, motor1, motor2, motor3
     command: "$SPD,1500,-1500,-2500,2500#"
 
   # 右转命令
   right:
     description: "右转"
-    speeds: [-2500, 2500, 1500, -1500]  # motor0, motor1, motor2, motor3
+    speeds: [-4500, 5000, 2000, -1500]  # motor0, motor1, motor2, motor3
     command: "$SPD,-1500,1500,2500,-2500#"
 
   # 停止命令
@@ -76,3 +76,6 @@ pid_defaults:
   ki: 0.1
   kd: 0.05
 
+scripts:
+  run_and_record_full:
+    duration_seconds: 15.0
