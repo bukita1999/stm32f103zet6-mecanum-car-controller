@@ -22,6 +22,7 @@
 #include "usb_comm.h"
 #include "usbd_cdc_if.h"
 #include "cmsis_os.h"
+#include <stddef.h>
 #include <stdlib.h>
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,18 +38,38 @@
  * @retval None
  */
 /* USB任务的上下文变量 */
-/* 文本模式配置 */
-#define TEXT_BUFFER_SIZE    512     /* 文本数据缓冲区大小 (足够存放4个电机+系统状态的文本) */
+/* USB Telemetry frame configuration */
+#define USB_FRAME_VERSION        0x01
+#define USB_MOTOR_COUNT          4
+#define USB_FRAME_SYNC           0xAA55
+#define USB_FRAME_TRAIL          0x55AA
+#define USB_FRAME_BUFFER_SIZE    64
 
-static uint8_t textBuffer[TEXT_BUFFER_SIZE];         /* 文本数据缓冲区 */
-#if 0  /* 文本模式下不再需要帧缓冲区 */
-static uint8_t frameBuffer[FRAME_BUFFER_SIZE];      /* 完整帧缓冲区 */
-#endif
-/* 文本模式下不再需要批次ID计数器 */
-#if 0
-static uint16_t batchId = 0;                        /* 批次ID计数器 */
-#endif
-static uint32_t baseTimestamp = 0;                  /* 基准时间戳 */
+typedef struct __attribute__((packed)) {
+    uint16_t sync;
+    uint8_t  version;
+    uint8_t  reserved;
+    uint16_t frame_length;
+    uint32_t timestamp_ms;
+} UsbFrameHeader_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t  motor_id;
+    int16_t  target_rpm;
+    int16_t  current_rpm;
+    uint16_t pwm_percent;
+} UsbMotorRecord_t;
+
+typedef struct __attribute__((packed)) {
+    UsbFrameHeader_t header;
+    UsbMotorRecord_t motors[USB_MOTOR_COUNT];
+    uint32_t crc32;
+    uint16_t trail;
+} UsbTelemetryFrame_t;
+
+static uint8_t usbFrameBuffer[USB_FRAME_BUFFER_SIZE];
+
+_Static_assert(sizeof(UsbTelemetryFrame_t) <= USB_FRAME_BUFFER_SIZE, "USB frame buffer too small");
 
 /**
  * @brief 生成模拟的批量数据 (已废弃，现在使用文本模式)
@@ -86,58 +107,39 @@ static void GenerateBatchData(BatchHeader_t *header, BatchData_t *data, uint16_t
 #endif
 
 /**
- * @brief 打包并发送批量数据（文本格式，与UART监控输出格式一致）
+ * @brief 打包并发送 USB 二进制遥测帧
  * @return 发送结果
  */
 static uint8_t SendBatchData(void)
 {
-    uint16_t totalLen = 0;
-    char *buffer = (char *)textBuffer;  // 使用文本缓冲区
+    UsbTelemetryFrame_t *frame = (UsbTelemetryFrame_t *)usbFrameBuffer;
+
+    frame->header.sync = USB_FRAME_SYNC;
+    frame->header.version = USB_FRAME_VERSION;
+    frame->header.reserved = 0;
+    frame->header.frame_length = sizeof(UsbTelemetryFrame_t);
+    frame->header.timestamp_ms = HAL_GetTick();
 
     /* 获取互斥量保护电机数据 */
     if (osMutexAcquire(motorDataMutexHandle, 100) != osOK) {
         return USBD_FAIL;
     }
 
-    /* 构建电机状态文本数据（与UART监控输出格式完全一致） */
-    for (uint8_t i = 0; i < 4; i++) {
-        /* 将浮点错误值转换为整数显示（乘以100保留2位小数精度） */
-        int16_t errorInt = (int16_t)(systemState.motors[i].pidController.error * 100);
-
-        /* 构建单行电机状态信息 */
-        int len = snprintf(buffer + totalLen, TEXT_BUFFER_SIZE - totalLen,
-                "Motor%d: Target:%d Current:%d RPM, PWM:%d%%, Error:%d.%02d\r\n",
-                i + 1,
-                systemState.motors[i].targetSpeed,
-                systemState.motors[i].currentSpeed,
-                systemState.motors[i].pwmPercent,
-                errorInt / 100, abs(errorInt % 100));
-
-        if (len > 0 && totalLen + len < TEXT_BUFFER_SIZE) {
-            totalLen += len;
-        } else {
-            /* 缓冲区空间不足 */
-            osMutexRelease(motorDataMutexHandle);
-            return USBD_FAIL;
-        }
-    }
-
-    /* 添加系统状态信息 */
-    int len = snprintf(buffer + totalLen, TEXT_BUFFER_SIZE - totalLen,
-            "System: Init=%d, PCA9685=%d, MotorErr=%d\r\n",
-            systemState.systemFlags.initialized,
-            systemState.systemFlags.pca9685Error,
-            systemState.systemFlags.motorError);
-
-    if (len > 0 && totalLen + len < TEXT_BUFFER_SIZE) {
-        totalLen += len;
+    for (uint8_t i = 0; i < USB_MOTOR_COUNT; i++) {
+        frame->motors[i].motor_id = i + 1;
+        frame->motors[i].target_rpm = systemState.motors[i].targetSpeed;
+        frame->motors[i].current_rpm = systemState.motors[i].currentSpeed;
+        frame->motors[i].pwm_percent = systemState.motors[i].pwmPercent;
     }
 
     /* 释放互斥量 */
     osMutexRelease(motorDataMutexHandle);
 
-    /* 发送文本数据 */
-    return CDC_Transmit_Buffer((uint8_t *)buffer, totalLen);
+    frame->crc32 = crc32_zlib((uint8_t *)frame, offsetof(UsbTelemetryFrame_t, crc32));
+    frame->trail = USB_FRAME_TRAIL;
+
+    /* 发送二进制帧 */
+    return CDC_Transmit_Buffer((uint8_t *)frame, frame->header.frame_length);
 }
 
 /**
@@ -147,11 +149,7 @@ static uint8_t SendBatchData(void)
  */
 void UsbTask_Init(void *argument)
 {
-    /* 初始化随机数种子 */
-    srand(HAL_GetTick());
-
-    /* 初始化基准时间戳 */
-    baseTimestamp = HAL_GetTick();
+    (void)argument;
 }
 
 /**
