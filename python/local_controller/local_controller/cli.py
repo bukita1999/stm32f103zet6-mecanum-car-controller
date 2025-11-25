@@ -8,7 +8,7 @@ from typing import Optional
 
 from .config import AppConfig, load_config
 from .modes.remote import RemoteControlMode
-from .modes.sequence import SequenceMode
+from .modes.sequence import SequenceMode, load_sequence_commands
 from .serial_client import SerialCommandClient
 from .telemetry import TelemetryLogger
 
@@ -59,6 +59,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
 
     config = load_config(args.config)
+
+    preloaded_commands = None
+    if args.mode == "sequence":
+        try:
+            preloaded_commands = load_sequence_commands(args.csv)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("Failed to load sequence CSV %s: %s", args.csv, exc)
+            return 1
+
     telemetry_logger = TelemetryLogger(config.telemetry_serial, _default_output_dir())
     telemetry_logger.start()
 
@@ -68,7 +77,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.mode == "remote":
             mode = RemoteControlMode(client, config.remote_profiles, action=args.action)
         elif args.mode == "sequence":
-            mode = SequenceMode(client, csv_path=args.csv)
+            mode = SequenceMode(client, csv_path=args.csv, preloaded_commands=preloaded_commands)
         else:
             parser.error(f"Unknown mode {args.mode}")
             return 2
