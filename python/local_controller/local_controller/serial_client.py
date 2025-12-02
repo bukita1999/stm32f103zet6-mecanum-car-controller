@@ -38,6 +38,16 @@ class SerialCommandClient:
             self._serial.write(data)
             self._serial.flush()
 
+    def send_text(self, data: str, append_newline: bool = True) -> None:
+        """Send an arbitrary string over the serial port."""
+        payload = data
+        if append_newline and not payload.endswith("\n"):
+            payload += "\n"
+        encoded = payload.encode("utf-8")
+        with self._lock:
+            self._serial.write(encoded)
+            self._serial.flush()
+
     def drain_input(self) -> bytes:
         with self._lock:
             available = self._serial.in_waiting

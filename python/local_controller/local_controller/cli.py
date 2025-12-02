@@ -9,6 +9,7 @@ from typing import Optional
 from .config import AppConfig, load_config
 from .modes.remote import RemoteControlMode
 from .modes.sequence import SequenceMode, load_sequence_commands
+from .modes.webdebug import WebDebugMode
 from .serial_client import SerialCommandClient
 from .telemetry import TelemetryLogger
 
@@ -46,6 +47,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to sequence CSV file",
     )
 
+    webdebug = subparsers.add_parser("webdebug", help="Launch web debug web UI")
+    webdebug.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Host/IP to bind for the web UI",
+    )
+    webdebug.add_argument(
+        "--port",
+        type=int,
+        default=5000,
+        help="Port for the web UI",
+    )
+    webdebug.add_argument(
+        "--no-newline",
+        action="store_true",
+        help="Do not append newline when sending typed messages",
+    )
+
     return parser
 
 
@@ -78,6 +97,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             mode = RemoteControlMode(client, config.remote_profiles, action=args.action)
         elif args.mode == "sequence":
             mode = SequenceMode(client, csv_path=args.csv, preloaded_commands=preloaded_commands)
+        elif args.mode == "webdebug":
+            mode = WebDebugMode(
+                client,
+                host=args.host,
+                port=args.port,
+                append_newline=not args.no_newline,
+            )
         else:
             parser.error(f"Unknown mode {args.mode}")
             return 2
