@@ -87,7 +87,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             logger.error("Failed to load sequence CSV %s: %s", args.csv, exc)
             return 1
 
-    telemetry_logger = TelemetryLogger(config.telemetry_serial, _default_output_dir())
+    telemetry_logger = TelemetryLogger(
+        config.telemetry_serial,
+        _default_output_dir(),
+        session_name=args.mode,
+    )
     telemetry_logger.start()
 
     client = SerialCommandClient(config.command_serial)

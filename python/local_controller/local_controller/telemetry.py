@@ -6,6 +6,7 @@ import logging
 import struct
 import threading
 import time
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -117,15 +118,24 @@ def _crc32(data: bytes) -> int:
 
 
 class TelemetryLogger:
-    def __init__(self, cfg: SerialPortConfig, output_dir: Path) -> None:
+    def __init__(
+        self,
+        cfg: SerialPortConfig,
+        output_dir: Path,
+        session_name: str = "telemetry",
+        prompt_on_stop: bool = True,
+    ) -> None:
         self._cfg = cfg
         self._output_dir = output_dir
+        self._session_name = session_name
+        self._prompt_on_stop = prompt_on_stop
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._serial: Optional[serial.Serial] = None
         self._decoder = TelemetryDecoder()
         self._writer: Optional[csv.DictWriter] = None
         self._csv_file: Optional[object] = None
+        self._csv_path: Optional[Path] = None
 
     def start(self) -> None:
         if self._thread is not None:
@@ -133,7 +143,8 @@ class TelemetryLogger:
         self._stop_event.clear()
         self._output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        csv_path = self._output_dir / f"telemetry_{timestamp}.csv"
+        csv_path = self._output_dir / f"{self._session_name}_{timestamp}.csv"
+        self._csv_path = csv_path
         self._csv_file = csv_path.open("w", newline="", encoding="utf-8")
         self._writer = csv.DictWriter(
             self._csv_file,
@@ -157,6 +168,8 @@ class TelemetryLogger:
             self._csv_file.close()
             self._csv_file = None
             self._writer = None
+            if self._csv_path and self._csv_path.exists():
+                self._csv_path.unlink()
             raise
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -171,6 +184,8 @@ class TelemetryLogger:
         if self._csv_file:
             self._csv_file.close()
             self._csv_file = None
+        if self._prompt_on_stop:
+            self._confirm_save()
 
     def _run(self) -> None:
         assert self._serial is not None
@@ -199,4 +214,30 @@ class TelemetryLogger:
                     }
                 )
         self._csv_file.flush()
+
+    def _confirm_save(self) -> None:
+        if not self._csv_path or not self._csv_path.exists():
+            return
+        if not sys.stdin.isatty():
+            logger.info("Telemetry CSV saved to %s (no TTY for prompt)", self._csv_path)
+            return
+        prompt = f"Keep telemetry CSV {self._csv_path.name}? [y/N]: "
+        while True:
+            try:
+                response = input(prompt).strip().lower()
+            except EOFError:
+                logger.info("No input received; keeping telemetry CSV %s", self._csv_path)
+                return
+            if response in ("y", "yes"):
+                logger.info("Kept telemetry CSV %s", self._csv_path)
+                return
+            if response in ("", "n", "no"):
+                try:
+                    self._csv_path.unlink()
+                except OSError as exc:
+                    logger.warning("Failed to delete telemetry CSV %s: %s", self._csv_path, exc)
+                else:
+                    logger.info("Deleted telemetry CSV %s", self._csv_path)
+                return
+            print("Please enter y or n.")
 logger = logging.getLogger(__name__)

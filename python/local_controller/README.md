@@ -92,7 +92,7 @@ uv run python -m local_controller sequence --csv data/sample_sequence.csv
 
 无论哪种模式，`TelemetryLogger` 都会：
 
-- 在 `output/telemetry_<timestamp>.csv` 中写入解码后的帧。
+- 在 `output/<mode>_<timestamp>.csv` 中写入解码后的帧（`<mode>` 为 `remote/sequence/webdebug`）。
 - CSV 字段：`host_time,frame_timestamp_ms,motor_id,target_rpm,current_rpm,pwm_percent`。
 
-终止程序或 `Ctrl+C` 时会自动停止遥测线程并关闭串口。
+终止程序或 `Ctrl+C` 时会自动停止遥测线程并关闭串口，随后询问是否保留 CSV。
