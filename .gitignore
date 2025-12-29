@@ -102,3 +102,5 @@ python/.python-version
 python/uv.lock
 
 *.png
+
+python/local_controller/output/
