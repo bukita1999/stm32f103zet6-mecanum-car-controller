@@ -142,7 +142,7 @@ class TelemetryLogger:
             return
         self._stop_event.clear()
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        timestamp = time.strftime("%Y%m%d_%H%M")
         csv_path = self._output_dir / f"{self._session_name}_{timestamp}.csv"
         self._csv_path = csv_path
         self._csv_file = csv_path.open("w", newline="", encoding="utf-8")

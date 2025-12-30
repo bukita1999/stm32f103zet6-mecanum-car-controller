@@ -87,12 +87,14 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     preloaded_commands = None
     sequence_csv = None
+    session_name = args.mode
     if args.mode == "sequence":
         try:
             if args.tui:
                 sequence_csv = _select_csv_from_data(_default_data_dir())
             else:
                 sequence_csv = args.csv
+            session_name = f"{args.mode}_{sequence_csv.stem}"
             preloaded_commands = load_sequence_commands(sequence_csv)
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("Failed to load sequence CSV %s: %s", sequence_csv, exc)
@@ -101,7 +103,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     telemetry_logger = TelemetryLogger(
         config.telemetry_serial,
         _default_output_dir(),
-        session_name=args.mode,
+        session_name=session_name,
     )
     telemetry_logger.start()
 
