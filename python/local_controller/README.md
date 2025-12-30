@@ -88,6 +88,14 @@ uv run python -m local_controller sequence --csv data/sample_sequence.csv
 
 脚本会按 `time_s` 时间戳顺序发送速度命令。
 
+也可用交互式选择：
+
+```bash
+uv run python -m local_controller sequence --tui
+```
+
+该模式会列出 `data/` 目录中的 CSV 文件供选择。
+
 ## 遥测记录
 
 无论哪种模式，`TelemetryLogger` 都会：

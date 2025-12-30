@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -40,11 +41,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sequence = subparsers.add_parser("sequence", help="Run predefined CSV sequence")
-    sequence.add_argument(
+    sequence_source = sequence.add_mutually_exclusive_group(required=True)
+    sequence_source.add_argument(
         "--csv",
         type=Path,
-        required=True,
         help="Path to sequence CSV file",
+    )
+    sequence_source.add_argument(
+        "--tui",
+        action="store_true",
+        help="Select a CSV file from the data directory",
     )
 
     webdebug = subparsers.add_parser("webdebug", help="Launch web debug web UI")
@@ -80,11 +86,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     config = load_config(args.config)
 
     preloaded_commands = None
+    sequence_csv = None
     if args.mode == "sequence":
         try:
-            preloaded_commands = load_sequence_commands(args.csv)
+            if args.tui:
+                sequence_csv = _select_csv_from_data(_default_data_dir())
+            else:
+                sequence_csv = args.csv
+            preloaded_commands = load_sequence_commands(sequence_csv)
         except Exception as exc:  # pylint: disable=broad-except
-            logger.error("Failed to load sequence CSV %s: %s", args.csv, exc)
+            logger.error("Failed to load sequence CSV %s: %s", sequence_csv, exc)
             return 1
 
     telemetry_logger = TelemetryLogger(
@@ -100,7 +111,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.mode == "remote":
             mode = RemoteControlMode(client, config.remote_profiles, action=args.action)
         elif args.mode == "sequence":
-            mode = SequenceMode(client, csv_path=args.csv, preloaded_commands=preloaded_commands)
+            mode = SequenceMode(
+                client,
+                csv_path=sequence_csv,
+                preloaded_commands=preloaded_commands,
+            )
         elif args.mode == "webdebug":
             mode = WebDebugMode(
                 client,
@@ -123,3 +138,32 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 def _default_output_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "output"
+
+
+def _default_data_dir() -> Path:
+    return Path(__file__).resolve().parent.parent / "data"
+
+
+def _select_csv_from_data(data_dir: Path) -> Path:
+    if not sys.stdin.isatty():
+        raise RuntimeError("--tui requires an interactive terminal")
+    if not data_dir.exists():
+        raise FileNotFoundError(f"Data directory not found: {data_dir}")
+    csv_files = sorted(data_dir.glob("*.csv"))
+    if not csv_files:
+        raise FileNotFoundError(f"No CSV files found in {data_dir}")
+    print("Select a sequence CSV:")
+    for idx, path in enumerate(csv_files, start=1):
+        print(f"  {idx}. {path.name}")
+    while True:
+        choice = input("Enter number (or q to quit): ").strip().lower()
+        if choice in {"q", "quit", "exit"}:
+            raise RuntimeError("Sequence selection cancelled")
+        try:
+            index = int(choice)
+        except ValueError:
+            print("Please enter a valid number.")
+            continue
+        if 1 <= index <= len(csv_files):
+            return csv_files[index - 1]
+        print("Selection out of range.")
