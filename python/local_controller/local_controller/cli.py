@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import AppConfig, load_config
+from .modes.base import ControlMode
 from .modes.remote import RemoteControlMode
 from .modes.sequence import SequenceMode, load_sequence_commands
 from .modes.webdebug import WebDebugMode
@@ -86,7 +87,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     config = load_config(args.config)
 
     preloaded_commands = None
-    sequence_csv = None
+    sequence_csv: Path | None = None
     session_name = args.mode
     if args.mode == "sequence":
         try:
@@ -110,9 +111,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     client = SerialCommandClient(config.command_serial)
 
     try:
+        mode: ControlMode
         if args.mode == "remote":
             mode = RemoteControlMode(client, config.remote_profiles, action=args.action)
         elif args.mode == "sequence":
+            if sequence_csv is None:
+                raise RuntimeError("Sequence CSV path not set")
             mode = SequenceMode(
                 client,
                 csv_path=sequence_csv,

@@ -5,9 +5,10 @@ import logging
 import queue
 import threading
 import time
-from typing import Iterator, Set
+from typing import Any, Iterator, Mapping, Set
 
 from flask import Flask, Response, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from ..serial_client import SerialCommandClient
 from .base import ControlMode
@@ -210,13 +211,14 @@ class WebDebugMode(ControlMode):
 
     def _setup_routes(self) -> None:
         @self._app.get("/")
-        def index() -> Response:
+        def index() -> ResponseReturnValue:
             return Response(INDEX_HTML, mimetype="text/html")
 
         @self._app.post("/send")
-        def send_message() -> Response:
-            payload = request.get_json(silent=True) or request.form
-            message = payload.get("message", "")
+        def send_message() -> ResponseReturnValue:
+            payload = request.get_json(silent=True)
+            data: Mapping[str, Any] = payload if isinstance(payload, dict) else request.form
+            message = data.get("message", "")
             if not isinstance(message, str):
                 return jsonify({"error": "message must be a string"}), 400
             if not message:
@@ -229,7 +231,7 @@ class WebDebugMode(ControlMode):
             return jsonify({"status": "ok"})
 
         @self._app.get("/events")
-        def events() -> Response:
+        def events() -> ResponseReturnValue:
             client_queue: queue.Queue[str] = queue.Queue(maxsize=200)
             self._listeners.add(client_queue)
 

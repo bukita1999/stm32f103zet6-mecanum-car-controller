@@ -9,7 +9,7 @@ import time
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, TextIO
 
 import serial
 
@@ -110,7 +110,7 @@ class TelemetryDecoder:
         return frames
 
 
-def _crc32(data: bytes) -> int:
+def _crc32(data: bytes | bytearray | memoryview) -> int:
     # zlib.crc32 uses signed results, so mask to match firmware implementation
     import zlib
 
@@ -133,8 +133,8 @@ class TelemetryLogger:
         self._stop_event = threading.Event()
         self._serial: Optional[serial.Serial] = None
         self._decoder = TelemetryDecoder()
-        self._writer: Optional[csv.DictWriter] = None
-        self._csv_file: Optional[object] = None
+        self._writer: Optional[csv.DictWriter[str]] = None
+        self._csv_file: Optional[TextIO] = None
         self._csv_path: Optional[Path] = None
 
     def start(self) -> None:
@@ -165,6 +165,7 @@ class TelemetryLogger:
                 timeout=self._cfg.timeout,
             )
         except serial.SerialException:
+            assert self._csv_file is not None
             self._csv_file.close()
             self._csv_file = None
             self._writer = None
@@ -200,6 +201,7 @@ class TelemetryLogger:
 
     def _write_frames(self, frames: Iterable[TelemetryFrame]) -> None:
         assert self._writer is not None
+        assert self._csv_file is not None
         now = time.time()
         for frame in frames:
             for motor in frame.motors:
