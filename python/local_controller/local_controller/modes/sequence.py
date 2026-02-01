@@ -16,17 +16,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SequenceCommand:
-    timestamp: float
+    timestamp_ms: int
     speeds: List[int]
 
 
-def _parse_timestamp(raw: str) -> float:
-    """Parse timestamp preferring float; fall back to int."""
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        # Try int fallback for whole-number strings like "5"
-        return float(int(raw))
+def _parse_timestamp_ms(raw: str) -> int:
+    """Parse timestamp as integer milliseconds."""
+    return int(raw)
 
 
 def load_sequence_commands(csv_path: Path) -> List["SequenceCommand"]:
@@ -34,24 +30,24 @@ def load_sequence_commands(csv_path: Path) -> List["SequenceCommand"]:
     commands: List[SequenceCommand] = []
     with csv_path.open("r", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
-        required = ["time_s", "m0", "m1", "m2", "m3"]
+        required = ["time_ms", "m0", "m1", "m2", "m3"]
         if reader.fieldnames is None:
             raise ValueError("CSV must contain a header row")
         missing = [field for field in required if field not in reader.fieldnames]
         if missing:
             raise ValueError(f"CSV is missing fields: {missing}")
         for row in reader:
-            if (row.get("time_s") or "").strip() == "time_s":
+            if (row.get("time_ms") or "").strip() == "time_ms":
                 logger.debug("Skipping duplicate header row: %s", row)
                 continue
             try:
-                timestamp = _parse_timestamp(row["time_s"])
+                timestamp_ms = _parse_timestamp_ms(row["time_ms"])
                 speeds = [int(row[f"m{i}"]) for i in range(4)]
             except (TypeError, ValueError) as exc:
                 logger.warning("Skipping invalid row %s: %s", row, exc)
                 continue
-            commands.append(SequenceCommand(timestamp=timestamp, speeds=speeds))
-    commands.sort(key=lambda cmd: cmd.timestamp)
+            commands.append(SequenceCommand(timestamp_ms=timestamp_ms, speeds=speeds))
+    commands.sort(key=lambda cmd: cmd.timestamp_ms)
     return commands
 
 
@@ -74,11 +70,12 @@ class SequenceMode(ControlMode):
         logger.info("Starting sequence with %d steps", len(commands))
         start = time.monotonic()
         for cmd in commands:
-            now = time.monotonic() - start
-            delay = cmd.timestamp - now
-            if delay > 0:
-                logger.debug("Waiting %.2fs before next command", delay)
-                time.sleep(delay)
+            now_ms = (time.monotonic() - start) * 1000.0
+            delay_ms = cmd.timestamp_ms - now_ms
+            if delay_ms > 0:
+                delay_s = delay_ms / 1000.0
+                logger.debug("Waiting %.3fs before next command", delay_s)
+                time.sleep(delay_s)
             try:
                 self._client.send_speeds(cmd.speeds)
             except Exception as exc:  # pylint: disable=broad-except

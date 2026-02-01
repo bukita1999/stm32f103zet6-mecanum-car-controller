@@ -68,16 +68,16 @@ uv run python -m local_controller remote --action forward
 
 ## 预定义序列
 
-CSV 文件包含 `time_s,m0,m1,m2,m3` 列，例如 `data/sample_sequence.csv`：
+CSV 文件包含 `time_ms,m0,m1,m2,m3` 列（`time_ms` 为整数毫秒），例如 `data/sample_sequence.csv`：
 
 ```csv
-time_s,m0,m1,m2,m3
-0.0,0,0,0,0
-2.0,-4000,4000,4000,-4000
-4.5,-2000,1500,4500,-5000
-7.0,0,0,0,0
-9.0,4000,-4000,-4000,4000
-12.0,0,0,0,0
+time_ms,m0,m1,m2,m3
+0,0,0,0,0
+2000,-4000,4000,4000,-4000
+4500,-2000,1500,4500,-5000
+7000,0,0,0,0
+9000,4000,-4000,-4000,4000
+12000,0,0,0,0
 ```
 
 运行：
@@ -86,7 +86,7 @@ time_s,m0,m1,m2,m3
 uv run python -m local_controller sequence --csv data/sample_sequence.csv
 ```
 
-脚本会按 `time_s` 时间戳顺序发送速度命令。
+脚本会按 `time_ms` 时间戳顺序发送速度命令。
 
 也可用交互式选择：
 
