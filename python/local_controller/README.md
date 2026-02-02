@@ -96,6 +96,14 @@ uv run python -m local_controller sequence --tui
 
 该模式会列出 `data/` 目录中的 CSV 文件供选择。
 
+生成序列 CSV（交互式）：
+
+```bash
+uv run python -m local_controller sequence --create
+```
+
+该模式会引导选择 `data/` 下的输出目录、输入文件名、设置 `step_ms`，随后按提示输入时间点与轮速，并自动进行插值生成。
+
 ## 遥测记录
 
 无论哪种模式，`TelemetryLogger` 都会：

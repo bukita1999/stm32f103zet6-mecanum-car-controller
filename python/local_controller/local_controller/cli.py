@@ -10,7 +10,11 @@ from typing import Optional
 from .config import AppConfig, load_config
 from .modes.base import ControlMode
 from .modes.remote import RemoteControlMode
-from .modes.sequence import SequenceMode, load_sequence_commands
+from .modes.sequence import (
+    SequenceMode,
+    create_sequence_csv_interactive,
+    load_sequence_commands,
+)
 from .modes.webdebug import WebDebugMode
 from .serial_client import SerialCommandClient
 from .telemetry import TelemetryLogger
@@ -53,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Select a CSV file from the data directory",
     )
+    sequence_source.add_argument(
+        "--create",
+        action="store_true",
+        help="Create a sequence CSV interactively",
+    )
 
     webdebug = subparsers.add_parser("webdebug", help="Launch web debug web UI")
     webdebug.add_argument(
@@ -93,6 +102,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             if args.tui:
                 sequence_csv = _select_csv_from_data(_default_data_dir())
+            elif args.create:
+                sequence_csv = create_sequence_csv_interactive(_default_data_dir())
             else:
                 sequence_csv = args.csv
             session_name = f"{args.mode}_{sequence_csv.stem}"
