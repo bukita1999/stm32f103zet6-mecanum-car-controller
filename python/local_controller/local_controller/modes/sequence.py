@@ -59,18 +59,22 @@ def create_sequence_csv_interactive(data_dir: Path) -> Path:
     output_dir = _select_output_dir(data_dir)
     output_path = _prompt_output_filename(output_dir)
     step_ms = _prompt_step_ms(default_ms=500)
+    first_speeds = _prompt_first_speeds()
 
     rows: List[SequenceCommand] = [
         SequenceCommand(timestamp_ms=0, speeds=[0, 0, 0, 0]),
-        SequenceCommand(timestamp_ms=1000, speeds=[0, 0, 0, 0]),
+        SequenceCommand(timestamp_ms=1000, speeds=first_speeds),
     ]
     prev_time_ms = 1000
-    prev_speeds = [0, 0, 0, 0]
+    prev_speeds = first_speeds
 
     while True:
         next_time_ms = _prompt_next_time_ms(prev_time_ms, step_ms)
         if next_time_ms is None:
-            break
+            if _is_stop_speeds(prev_speeds):
+                break
+            print("Last speeds must be 0,0,0,0. Please add a stop node before exiting.")
+            continue
         next_speeds = _prompt_speeds()
         rows.extend(
             _interpolate_commands(
@@ -167,6 +171,11 @@ def _prompt_step_ms(default_ms: int) -> int:
         return value
 
 
+def _prompt_first_speeds() -> List[int]:
+    print("Select speeds for 1000ms:")
+    return _prompt_speeds()
+
+
 def _prompt_next_time_ms(prev_time_ms: int, step_ms: int) -> Optional[int]:
     while True:
         raw = input("Enter next time in ms (or q to finish): ").strip().lower()
@@ -184,6 +193,10 @@ def _prompt_next_time_ms(prev_time_ms: int, step_ms: int) -> Optional[int]:
             print(f"Time must be a multiple of {step_ms}ms.")
             continue
         return value
+
+
+def _is_stop_speeds(speeds: Sequence[int]) -> bool:
+    return all(speed == 0 for speed in speeds)
 
 
 def _prompt_speeds() -> List[int]:
