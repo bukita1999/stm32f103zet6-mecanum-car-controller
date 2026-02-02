@@ -103,6 +103,7 @@ uv run python -m local_controller sequence --create
 ```
 
 该模式会引导选择 `data/` 下的输出目录、输入文件名、设置 `step_ms`，随后按提示输入时间点与轮速，并自动进行插值生成。
+该模式仅创建 CSV，不会启动串口或遥测线程。
 
 ## 遥测记录
 

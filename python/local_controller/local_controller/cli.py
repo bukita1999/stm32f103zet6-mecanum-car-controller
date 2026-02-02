@@ -98,12 +98,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     preloaded_commands = None
     sequence_csv: Path | None = None
     session_name = args.mode
+
+    if args.mode == "sequence" and args.create:
+        try:
+            sequence_csv = create_sequence_csv_interactive(_default_data_dir())
+            logger.info("Sequence CSV created at %s", sequence_csv)
+            return 0
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("Failed to create sequence CSV: %s", exc)
+            return 1
+
     if args.mode == "sequence":
         try:
             if args.tui:
                 sequence_csv = _select_csv_from_data(_default_data_dir())
-            elif args.create:
-                sequence_csv = create_sequence_csv_interactive(_default_data_dir())
             else:
                 sequence_csv = args.csv
             session_name = f"{args.mode}_{sequence_csv.stem}"
